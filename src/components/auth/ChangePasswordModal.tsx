@@ -32,19 +32,30 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
 
     setLoading(true)
 
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword,
-    })
+    try {
+      const { error, data } = await supabase.auth.updateUser({
+        password: newPassword,
+      })
 
-    if (error) {
-      setError(error.message)
+      console.log('updateUser response:', { error, data })
+
+      if (error) {
+        if (error.message.includes('same as')) {
+          setError('La nueva contraseña debe ser diferente a la actual')
+        } else {
+          setError(error.message)
+        }
+      } else {
+        setSuccess(true)
+        setTimeout(() => {
+          handleClose()
+        }, 2000)
+      }
+    } catch (err) {
+      console.error('Exception changing password:', err)
+      setError('Error al cambiar la contraseña')
+    } finally {
       setLoading(false)
-    } else {
-      setSuccess(true)
-      setLoading(false)
-      setTimeout(() => {
-        handleClose()
-      }, 2000)
     }
   }
 
