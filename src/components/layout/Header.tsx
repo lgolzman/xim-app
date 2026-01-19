@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { Button } from '../ui/Button'
+import { ChangePasswordModal } from '../auth/ChangePasswordModal'
 
 export function Header() {
   const { user, profile, signOut, isAdmin } = useAuth()
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false)
 
   return (
     <header className="bg-white border-b border-gray-200">
@@ -50,6 +53,9 @@ export function Header() {
                   {profile?.role}
                 </span>
               </div>
+              <Button variant="ghost" size="sm" onClick={() => setIsPasswordModalOpen(true)}>
+                Cambiar clave
+              </Button>
               <Button variant="ghost" size="sm" onClick={signOut}>
                 Cerrar sesión
               </Button>
@@ -57,6 +63,11 @@ export function Header() {
           )}
         </div>
       </div>
+
+      <ChangePasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+      />
     </header>
   )
 }
