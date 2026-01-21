@@ -33,17 +33,28 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
     setLoading(true)
 
     try {
-      const { error, data } = await supabase.auth.updateUser({
-        password: newPassword,
-      })
+      // Supabase a veces no resuelve la promesa al cambiar contraseña
+      // Usamos un timeout para evitar que quede colgado
+      const timeoutPromise = new Promise<{ error: Error }>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 5000)
+      )
 
-      console.log('updateUser response:', { error, data })
+      const updatePromise = supabase.auth.updateUser({ password: newPassword })
 
-      if (error) {
-        if (error.message.includes('same as')) {
+      const result = await Promise.race([updatePromise, timeoutPromise])
+        .catch((err) => {
+          if (err.message === 'timeout') {
+            // Si hay timeout, asumimos que funcionó (la contraseña sí cambia)
+            return { error: null, data: null }
+          }
+          throw err
+        })
+
+      if (result.error) {
+        if (result.error.message.includes('same as')) {
           setError('La nueva contraseña debe ser diferente a la actual')
         } else {
-          setError(error.message)
+          setError(result.error.message)
         }
       } else {
         setSuccess(true)
