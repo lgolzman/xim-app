@@ -24,6 +24,17 @@ export function ResetPassword() {
     checkSession()
   }, [])
 
+  // Redirigir al login cuando el cambio es exitoso
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        supabase.auth.signOut()
+        window.location.href = '/login'
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [success])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -41,18 +52,25 @@ export function ResetPassword() {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: password,
-      })
+      // Supabase a veces no resuelve la promesa al cambiar contraseña
+      const timeoutPromise = new Promise<{ error: Error }>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 5000)
+      )
 
-      if (error) {
-        setError(error.message)
+      const updatePromise = supabase.auth.updateUser({ password })
+
+      const result = await Promise.race([updatePromise, timeoutPromise])
+        .catch((err) => {
+          if (err.message === 'timeout') {
+            return { error: null, data: null }
+          }
+          throw err
+        })
+
+      if (result.error) {
+        setError(result.error.message)
       } else {
         setSuccess(true)
-        await supabase.auth.signOut()
-        setTimeout(() => {
-          navigate('/login')
-        }, 3000)
       }
     } catch (err) {
       console.error('Error resetting password:', err)
