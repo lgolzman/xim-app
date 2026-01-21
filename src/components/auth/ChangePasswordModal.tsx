@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal } from '../ui/Modal'
 import { Input } from '../ui/Input'
 import { Button } from '../ui/Button'
@@ -17,6 +17,17 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+
+  // Redirigir al login cuando el cambio es exitoso
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        signOut()
+        window.location.href = '/login'
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [success, signOut])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -60,12 +71,6 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
         }
       } else {
         setSuccess(true)
-        setTimeout(() => {
-          // No esperamos a que signOut termine porque puede colgarse
-          signOut()
-          // Forzamos la redirección
-          window.location.href = '/login'
-        }, 2000)
       }
     } catch (err) {
       console.error('Exception changing password:', err)
