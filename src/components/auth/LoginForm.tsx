@@ -3,12 +3,14 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { ForgotPasswordModal } from './ForgotPasswordModal'
 
 export function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
   const { signIn } = useAuth()
   const navigate = useNavigate()
 
@@ -72,14 +74,25 @@ export function LoginForm() {
             {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
           </Button>
 
-          <p className="text-center text-sm text-gray-600">
-            ¿Tienes una invitación?{' '}
+          <div className="flex justify-between text-sm">
+            <button
+              type="button"
+              onClick={() => setIsForgotPasswordOpen(true)}
+              className="text-blue-600 hover:text-blue-500 font-medium"
+            >
+              ¿Olvidaste tu clave?
+            </button>
             <Link to="/register" className="text-blue-600 hover:text-blue-500 font-medium">
               Registrarse
             </Link>
-          </p>
+          </div>
         </form>
       </div>
+
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        onClose={() => setIsForgotPasswordOpen(false)}
+      />
     </div>
   )
 }

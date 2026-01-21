@@ -3,6 +3,7 @@ import { Modal } from '../ui/Modal'
 import { Input } from '../ui/Input'
 import { Button } from '../ui/Button'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../context/AuthContext'
 
 interface ChangePasswordModalProps {
   isOpen: boolean
@@ -10,6 +11,7 @@ interface ChangePasswordModalProps {
 }
 
 export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProps) {
+  const { signOut } = useAuth()
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -58,8 +60,8 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
         }
       } else {
         setSuccess(true)
-        setTimeout(() => {
-          handleClose()
+        setTimeout(async () => {
+          await signOut()
         }, 2000)
       }
     } catch (err) {
@@ -83,6 +85,7 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
       {success ? (
         <div className="text-center py-4">
           <div className="text-green-600 font-medium">Contraseña actualizada correctamente</div>
+          <div className="text-gray-500 text-sm mt-2">Cerrando sesión...</div>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">

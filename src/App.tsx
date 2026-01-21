@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { Login } from './pages/Login'
 import { Register } from './pages/Register'
+import { ResetPassword } from './pages/ResetPassword'
 import { Exercises } from './pages/Exercises'
 import { Admin } from './pages/Admin'
 
@@ -13,6 +14,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           <Route
             path="/"
