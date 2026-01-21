@@ -60,8 +60,11 @@ export function ChangePasswordModal({ isOpen, onClose }: ChangePasswordModalProp
         }
       } else {
         setSuccess(true)
-        setTimeout(async () => {
-          await signOut()
+        setTimeout(() => {
+          // No esperamos a que signOut termine porque puede colgarse
+          signOut()
+          // Forzamos la redirección
+          window.location.href = '/login'
         }, 2000)
       }
     } catch (err) {
