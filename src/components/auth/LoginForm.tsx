@@ -78,7 +78,7 @@ export function LoginForm() {
             <button
               type="button"
               onClick={() => setIsForgotPasswordOpen(true)}
-              className="text-blue-600 hover:text-blue-500 font-medium"
+              className="text-red-600 hover:text-red-500 font-medium"
             >
               ¿Olvidaste tu clave?
             </button>
