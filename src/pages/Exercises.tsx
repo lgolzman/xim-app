@@ -87,7 +87,7 @@ export function Exercises() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Ejercicios</h1>
-            <p className="text-gray-600">Biblioteca de ejercicios de musculación</p>
+            <p className="text-gray-600">Biblioteca de ejercicios</p>
           </div>
           {isAdmin && (
             <Button onClick={handleCreate}>
