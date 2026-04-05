@@ -4,22 +4,20 @@ import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { MultiSelect } from '../ui/MultiSelect'
 import { TextArea } from '../ui/TextArea'
-import { useMovementPatterns } from '../../hooks/useMovementPatterns'
-import { useDirections } from '../../hooks/useDirections'
-import { useMuscles } from '../../hooks/useMuscles'
-import type { ExerciseFormData, ExerciseWithRelations, ChainType } from '../../lib/types'
+import type { ExerciseFormData, ExerciseWithRelations, ChainType, MovementPattern, Muscle } from '../../lib/types'
+import type { Direction } from '../../lib/types'
 
 interface ExerciseFormProps {
   exercise?: ExerciseWithRelations | null
   onSubmit: (data: ExerciseFormData) => Promise<void>
   onCancel: () => void
   loading?: boolean
+  patterns: MovementPattern[]
+  directions: Direction[]
+  muscles: Muscle[]
 }
 
-export function ExerciseForm({ exercise, onSubmit, onCancel, loading }: ExerciseFormProps) {
-  const { patterns } = useMovementPatterns()
-  const { directions } = useDirections()
-  const { muscles } = useMuscles()
+export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, directions, muscles }: ExerciseFormProps) {
 
   const [name, setName] = useState('')
   const [movementPatternId, setMovementPatternId] = useState('')

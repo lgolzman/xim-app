@@ -7,11 +7,17 @@ import { Modal } from '../components/ui/Modal'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { useExercises } from '../hooks/useExercises'
+import { useMovementPatterns } from '../hooks/useMovementPatterns'
+import { useDirections } from '../hooks/useDirections'
+import { useMuscles } from '../hooks/useMuscles'
 import { useAuth } from '../context/AuthContext'
 import type { ExerciseWithRelations, ExerciseFormData } from '../lib/types'
 
 export function Exercises() {
   const { exercises, loading, createExercise, updateExercise, deleteExercise } = useExercises()
+  const { patterns } = useMovementPatterns()
+  const { directions } = useDirections()
+  const { muscles } = useMuscles()
   const { isAdmin } = useAuth()
 
   const [selectedExercise, setSelectedExercise] = useState<ExerciseWithRelations | null>(null)
@@ -47,17 +53,21 @@ export function Exercises() {
     setSaving(true)
     setError('')
 
-    const { error } = isEditing && selectedExercise
-      ? await updateExercise(selectedExercise.id, data)
-      : await createExercise(data)
+    try {
+      const { error } = isEditing && selectedExercise
+        ? await updateExercise(selectedExercise.id, data)
+        : await createExercise(data)
 
-    if (error) {
-      setError(error)
+      if (error) {
+        setError(error)
+      } else {
+        setIsFormOpen(false)
+        setSelectedExercise(null)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error inesperado al guardar')
+    } finally {
       setSaving(false)
-    } else {
-      setIsFormOpen(false)
-      setSaving(false)
-      setSelectedExercise(null)
     }
   }
 
@@ -100,6 +110,9 @@ export function Exercises() {
           exercises={exercises}
           onSelect={handleSelect}
           loading={loading}
+          patterns={patterns}
+          directions={directions}
+          muscles={muscles}
         />
       </div>
 
@@ -135,6 +148,9 @@ export function Exercises() {
           onSubmit={handleSubmit}
           onCancel={() => setIsFormOpen(false)}
           loading={saving}
+          patterns={patterns}
+          directions={directions}
+          muscles={muscles}
         />
       </Modal>
 
