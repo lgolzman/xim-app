@@ -2,21 +2,18 @@ import { useState, useMemo } from 'react'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { ExerciseCard } from './ExerciseCard'
-import { useMovementPatterns } from '../../hooks/useMovementPatterns'
-import { useDirections } from '../../hooks/useDirections'
-import { useMuscles } from '../../hooks/useMuscles'
-import type { ExerciseWithRelations } from '../../lib/types'
+import type { ExerciseWithRelations, MovementPattern, Direction, Muscle } from '../../lib/types'
 
 interface ExerciseListProps {
   exercises: ExerciseWithRelations[]
   onSelect: (exercise: ExerciseWithRelations) => void
   loading?: boolean
+  patterns: MovementPattern[]
+  directions: Direction[]
+  muscles: Muscle[]
 }
 
-export function ExerciseList({ exercises, onSelect, loading }: ExerciseListProps) {
-  const { patterns } = useMovementPatterns()
-  const { directions } = useDirections()
-  const { muscles } = useMuscles()
+export function ExerciseList({ exercises, onSelect, loading, patterns, directions, muscles }: ExerciseListProps) {
 
   const [search, setSearch] = useState('')
   const [patternFilter, setPatternFilter] = useState('')
