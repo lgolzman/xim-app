@@ -39,33 +39,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setSession(session)
-      setUser(session?.user ?? null)
-
-      if (session?.user) {
-        const profile = await fetchProfile(session.user.id)
-        setProfile(profile)
-      }
-
-      setLoading(false)
-    }
-
-    initAuth()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
         setSession(session)
         setUser(session?.user ?? null)
 
         if (session?.user) {
           const profile = await fetchProfile(session.user.id)
           setProfile(profile)
-        } else {
-          setProfile(null)
         }
-
+      } catch (error) {
+        console.error('Error initializing auth:', error)
+        // Reset to logged-out state on error
+        setSession(null)
+        setUser(null)
+        setProfile(null)
+      } finally {
         setLoading(false)
+      }
+    }
+
+    initAuth()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        try {
+          setSession(session)
+          setUser(session?.user ?? null)
+
+          if (session?.user) {
+            const profile = await fetchProfile(session.user.id)
+            setProfile(profile)
+          } else {
+            setProfile(null)
+          }
+        } catch (error) {
+          console.error('Error in auth state change:', error)
+        } finally {
+          setLoading(false)
+        }
       }
     )
 
