@@ -38,14 +38,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>
+    let didInit = false
+
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
+        if (didInit) return // Timeout already fired
         setSession(session)
         setUser(session?.user ?? null)
 
         if (session?.user) {
           const profile = await fetchProfile(session.user.id)
+          if (didInit) return
           setProfile(profile)
         }
       } catch (error) {
@@ -55,9 +60,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
         setProfile(null)
       } finally {
-        setLoading(false)
+        if (!didInit) {
+          didInit = true
+          setLoading(false)
+        }
       }
     }
+
+    // Fallback timeout: if auth takes more than 5s, stop loading anyway
+    timeoutId = setTimeout(() => {
+      if (!didInit) {
+        console.warn('Auth initialization timed out')
+        didInit = true
+        setLoading(false)
+      }
+    }, 5000)
 
     initAuth()
 
@@ -81,7 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      clearTimeout(timeoutId)
+      subscription.unsubscribe()
+    }
   }, [])
 
   const signIn = async (email: string, password: string) => {
