@@ -67,12 +67,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Fallback timeout: if auth takes more than 5s, stop loading anyway
-    timeoutId = setTimeout(() => {
+    // Fallback timeout: if auth takes more than 5s, clear session and reload
+    timeoutId = setTimeout(async () => {
       if (!didInit) {
-        console.warn('Auth initialization timed out')
         didInit = true
-        setLoading(false)
+
+        // Check if we already tried to recover (prevent infinite reload loop)
+        const recoveryAttempted = sessionStorage.getItem('auth-recovery-attempted')
+        if (recoveryAttempted) {
+          console.warn('Auth initialization timed out after recovery attempt')
+          sessionStorage.removeItem('auth-recovery-attempted')
+          setSession(null)
+          setUser(null)
+          setProfile(null)
+          setLoading(false)
+          return
+        }
+
+        console.warn('Auth initialization timed out - clearing session and reloading')
+        try {
+          // Mark that we're attempting recovery
+          sessionStorage.setItem('auth-recovery-attempted', 'true')
+          // Clear Supabase storage keys from localStorage
+          const keys = Object.keys(localStorage).filter(key =>
+            key.startsWith('sb-') || key.includes('supabase')
+          )
+          keys.forEach(key => localStorage.removeItem(key))
+          // Force a page reload to get a fresh Supabase client
+          window.location.reload()
+        } catch (e) {
+          console.error('Error clearing session storage:', e)
+          sessionStorage.removeItem('auth-recovery-attempted')
+          setSession(null)
+          setUser(null)
+          setProfile(null)
+          setLoading(false)
+        }
       }
     }, 5000)
 
