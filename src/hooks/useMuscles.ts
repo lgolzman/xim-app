@@ -8,25 +8,32 @@ export function useMuscles() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchMuscles = useCallback(async () => {
+    console.log('[useMuscles] Starting fetch, setting loading=true')
     setLoading(true)
     setError(null)
 
     try {
+      console.log('[useMuscles] Making supabase request...')
       const { data, error } = await supabase
         .from('muscles')
         .select('*')
         .order('name')
+      console.log('[useMuscles] Request complete, data:', data?.length, 'items, error:', error)
 
       if (error) throw error
       setMuscles(data || [])
+      console.log('[useMuscles] setMuscles called')
     } catch (err) {
+      console.error('[useMuscles] Error:', err)
       setError(err instanceof Error ? err.message : 'Error al cargar músculos')
     } finally {
+      console.log('[useMuscles] Finally block, setting loading=false')
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
+    console.log('[useMuscles] useEffect running, calling fetchMuscles')
     fetchMuscles()
   }, [fetchMuscles])
 

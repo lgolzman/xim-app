@@ -44,7 +44,7 @@ export function Admin() {
             </nav>
           </div>
 
-          <div className="p-6">
+          <div className="p-6" key={activeTab}>
             {activeTab === 'patterns' && <MovementPatternManager />}
             {activeTab === 'muscles' && <MuscleManager />}
             {activeTab === 'invitations' && <InvitationManager />}

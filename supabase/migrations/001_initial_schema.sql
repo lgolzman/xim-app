@@ -334,33 +334,60 @@ INSERT INTO movement_patterns (name) VALUES
 
 -- Músculos principales
 INSERT INTO muscles (name) VALUES
-  ('Pectoral mayor'),
-  ('Pectoral menor'),
-  ('Deltoides anterior'),
-  ('Deltoides medio'),
-  ('Deltoides posterior'),
-  ('Trapecio'),
-  ('Dorsal ancho'),
-  ('Romboides'),
-  ('Bíceps braquial'),
-  ('Tríceps braquial'),
-  ('Braquial'),
-  ('Braquiorradial'),
-  ('Cuádriceps'),
-  ('Isquiotibiales'),
-  ('Glúteo mayor'),
-  ('Glúteo medio'),
-  ('Aductores'),
-  ('Abductores'),
-  ('Gemelos'),
-  ('Sóleo'),
-  ('Tibial anterior'),
-  ('Recto abdominal'),
-  ('Oblicuos'),
-  ('Transverso abdominal'),
-  ('Erectores espinales'),
-  ('Serrato anterior'),
-  ('Infraespinoso'),
-  ('Supraespinoso'),
-  ('Redondo mayor'),
-  ('Redondo menor');
+
+-- PECHO
+('Pectoral mayor'),
+
+-- HOMBROS
+('Deltoides anterior'),
+('Deltoides lateral'),
+('Deltoides posterior'),
+
+-- ESPALDA
+('Dorsal ancho'),
+('Trapecio superior'),
+('Trapecio medio/inferior'),
+('Romboides'),
+
+-- BRAZOS
+('Bíceps braquial'),
+('Tríceps braquial'),
+('Braquial'),
+
+-- ANTEBRAZOS
+('Antebrazos'),
+
+-- CORE
+('Recto abdominal'),
+('Oblicuos'),
+('Transverso abdominal'),
+('Erectores espinales'),
+
+-- GLÚTEOS
+('Glúteo mayor'),
+('Glúteo medio'),
+('Glúteo menor'),
+
+-- PIERNAS (anterior)
+('Cuádriceps'),
+
+-- PIERNAS (posterior)
+('Isquiotibiales'),
+
+-- PIERNAS (medial)
+('Aductores'),
+
+-- PANTORRILLAS
+('Gastrocnemio'),
+('Sóleo'),
+
+-- TOBILLO / PIE
+('Tibial anterior'),
+('Peroneos'),
+
+-- ESTABILIZADORES CLAVE
+('Serrato anterior'),
+
+-- CADERA / ESTABILIZACIÓN
+('Abductores de cadera'),
+('Tensor de la fascia lata');
