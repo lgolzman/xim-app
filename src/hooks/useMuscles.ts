@@ -8,6 +8,7 @@ export function useMuscles() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchMuscles = useCallback(async () => {
+    console.log('[useMuscles] fetchMuscles called, setting loading=true')
     setLoading(true)
     setError(null)
 
@@ -17,17 +18,22 @@ export function useMuscles() {
         .select('*')
         .order('name')
 
+      console.log('[useMuscles] Request complete:', data?.length, 'items')
       if (error) throw error
       setMuscles(data || [])
     } catch (err) {
+      console.error('[useMuscles] Error:', err)
       setError(err instanceof Error ? err.message : 'Error al cargar músculos')
     } finally {
+      console.log('[useMuscles] Finally: setting loading=false')
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
+    console.log('[useMuscles] useEffect mounted')
     fetchMuscles()
+    return () => console.log('[useMuscles] useEffect cleanup')
   }, [fetchMuscles])
 
   const createMuscle = async (name: string) => {
