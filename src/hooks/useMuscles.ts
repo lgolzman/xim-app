@@ -12,18 +12,32 @@ export function useMuscles() {
     setLoading(true)
     setError(null)
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      console.warn('[useMuscles] Request timed out after 10s')
+      controller.abort()
+    }, 10000)
+
     try {
       const { data, error } = await supabase
         .from('muscles')
         .select('*')
         .order('name')
+        .abortSignal(controller.signal)
 
+      clearTimeout(timeoutId)
       console.log('[useMuscles] Request complete:', data?.length, 'items')
       if (error) throw error
       setMuscles(data || [])
     } catch (err) {
-      console.error('[useMuscles] Error:', err)
-      setError(err instanceof Error ? err.message : 'Error al cargar músculos')
+      clearTimeout(timeoutId)
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.error('[useMuscles] Request aborted (timeout)')
+        setError('La solicitud tardó demasiado. Intenta recargar la página.')
+      } else {
+        console.error('[useMuscles] Error:', err)
+        setError(err instanceof Error ? err.message : 'Error al cargar músculos')
+      }
     } finally {
       console.log('[useMuscles] Finally: setting loading=false')
       setLoading(false)
