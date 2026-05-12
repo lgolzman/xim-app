@@ -323,14 +323,12 @@ INSERT INTO directions (name) VALUES
 
 -- Patrones de movimiento comunes
 INSERT INTO movement_patterns (name) VALUES
-  ('Press'),
+  ('Dominante de cadera'),
+  ('Dominante de rodilla'),
+  ('Empuje'),
   ('Tirón'),
-  ('Sentadilla'),
-  ('Bisagra de cadera'),
-  ('Zancada'),
   ('Rotación'),
-  ('Acarreo'),
-  ('Aislamiento');
+  ('Core');
 
 -- Músculos principales
 INSERT INTO muscles (name) VALUES
