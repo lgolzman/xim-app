@@ -128,7 +128,7 @@ export function AdminWorkoutDetail() {
             <Link to="/admin" className="hover:text-gray-700">Administración</Link>
             <span>/</span>
             <Link to={`/admin/students/${studentId}`} className="hover:text-gray-700">
-              {student?.email || 'Alumno'}
+              {student?.full_name || student?.name || student?.email || 'Alumno'}
             </Link>
             <span>/</span>
             <span>Entrenamiento</span>
@@ -177,7 +177,14 @@ export function AdminWorkoutDetail() {
                           <span className="text-xs text-gray-500 font-medium">
                             {block.block_letter}{exercise.position}
                           </span>
-                          <h3 className="font-semibold text-gray-900">{exercise.exercise?.name}</h3>
+                          <a
+                            href={`/exercises/${exercise.exercise_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold text-gray-900 hover:text-blue-700 hover:underline"
+                          >
+                            {exercise.exercise?.name}
+                          </a>
                           {exercise.note && (
                             <p className="text-sm text-gray-500 mt-1">📝 {exercise.note}</p>
                           )}

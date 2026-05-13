@@ -49,17 +49,26 @@ export function useInvitations() {
     }
   }, [fetchInvitations])
 
-  const createInvitation = async (email: string, role: UserRole) => {
+  const createInvitation = async (email: string, role: UserRole, invitedName?: string): Promise<{ invitation: Invitation | null; error: string | null }> => {
     try {
-      const { error: insertError } = await supabase.from('invitations').insert({
-        email: email.toLowerCase(),
-        role,
-      } as any)
+      const { data, error: insertError } = await supabase
+        .from('invitations')
+        .insert({
+          email: email.toLowerCase(),
+          role,
+          invited_name: invitedName?.trim() || null,
+        } as any)
+        .select()
+        .single()
+
       if (insertError) throw insertError
       await fetchInvitations()
-      return { error: null }
+      return { invitation: data as Invitation, error: null }
     } catch (err) {
-      return { error: err instanceof Error ? err.message : 'Error al crear invitación' }
+      return {
+        invitation: null,
+        error: err instanceof Error ? err.message : 'Error al crear invitación',
+      }
     }
   }
 

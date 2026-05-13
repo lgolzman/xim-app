@@ -82,6 +82,10 @@ const createEmptyWeeks = (totalWeeks: number): FormWeekSets[] => {
   }))
 }
 
+const isWeekEmpty = (week: FormWeekSets) => {
+  return week.sets.every(set => set.set_type === 'reps' && set.quantity === 8 && set.weight_kg.trim() === '')
+}
+
 export function RoutineForm({
   initialData,
   studentId,
@@ -469,6 +473,56 @@ export function RoutineForm({
     }))
   }
 
+  const replicateWeekOneToRest = (dayIndex: number, blockIndex: number, exerciseIndex: number) => {
+    const exercise = formData.days[dayIndex]?.blocks[blockIndex]?.exercises[exerciseIndex]
+    const weekOne = exercise?.weeks[0]
+    const targetWeeks = exercise?.weeks.slice(1) || []
+
+    if (!weekOne || targetWeeks.length === 0) return
+
+    const weeksWithData = targetWeeks
+      .filter(week => !isWeekEmpty(week))
+      .map(week => week.week_number)
+
+    if (weeksWithData.length > 0) {
+      const message = `Las semanas ${weeksWithData.join(', ')} ya tienen series. ¿Querés reemplazarlas con las de la Semana 1?`
+      if (!window.confirm(message)) return
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      days: prev.days.map((d, di) => {
+        if (di !== dayIndex) return d
+        return {
+          ...d,
+          blocks: d.blocks.map((b, bi) => {
+            if (bi !== blockIndex) return b
+            return {
+              ...b,
+              exercises: b.exercises.map((e, ei) => {
+                if (ei !== exerciseIndex) return e
+                const sourceWeek = e.weeks[0]
+                return {
+                  ...e,
+                  weeks: e.weeks.map((w, wi) => {
+                    if (wi === 0) return w
+                    return {
+                      ...w,
+                      sets: sourceWeek.sets.map(set => ({
+                        ...set,
+                        id: generateId(),
+                      })),
+                    }
+                  }),
+                }
+              }),
+            }
+          }),
+        }
+      }),
+    }))
+  }
+
   // Validar formulario
   const isValid = () => {
     if (!formData.student_id) return false
@@ -498,7 +552,10 @@ export function RoutineForm({
               label="Alumno"
               value={formData.student_id}
               onChange={(e) => updateFormData({ student_id: e.target.value })}
-              options={students.map(s => ({ value: s.id, label: s.name ? `${s.name} (${s.email})` : s.email }))}
+              options={students.map(s => {
+                const studentName = s.full_name || s.name
+                return { value: s.id, label: studentName ? `${studentName} (${s.email})` : s.email }
+              })}
               placeholder="Seleccionar alumno"
               disabled={!!studentId || studentsLoading}
             />
@@ -663,6 +720,16 @@ export function RoutineForm({
                                       onClick={() => copySetsFromPreviousWeek(dayIndex, blockIndex, exerciseIndex, expandedWeek - 1)}
                                     >
                                       Copiar semana anterior
+                                    </Button>
+                                  )}
+                                  {expandedWeek === 1 && formData.total_weeks > 1 && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-xs"
+                                      onClick={() => replicateWeekOneToRest(dayIndex, blockIndex, exerciseIndex)}
+                                    >
+                                      Replicar Semana 1 en el resto
                                     </Button>
                                   )}
                                   <Button

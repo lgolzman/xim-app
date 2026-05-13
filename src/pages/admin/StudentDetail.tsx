@@ -106,7 +106,7 @@ export function StudentDetail() {
   }
 
   const getActionMessage = () => {
-    const studentName = student?.name || student?.email
+    const studentName = student?.full_name || student?.name || student?.email
     if (actionType === 'enable') {
       return `¿Estás segura de habilitar a "${studentName}"?`
     }
@@ -160,8 +160,10 @@ export function StudentDetail() {
               <span>/</span>
               <span>Alumno</span>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">{student.name || student.email}</h1>
-            {student.name && (
+            <h1 className="text-2xl font-bold text-gray-900">
+              {student.full_name || student.name || student.email}
+            </h1>
+            {(student.full_name || student.name) && (
               <p className="text-sm text-gray-500">{student.email}</p>
             )}
           </div>

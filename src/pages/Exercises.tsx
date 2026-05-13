@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { Layout } from '../components/layout/Layout'
 import { ExerciseList } from '../components/exercises/ExerciseList'
 import { ExerciseForm } from '../components/exercises/ExerciseForm'
@@ -14,6 +15,8 @@ import { useAuth } from '../context/AuthContext'
 import type { ExerciseWithRelations, ExerciseFormData } from '../lib/types'
 
 export function Exercises() {
+  const navigate = useNavigate()
+  const { exerciseId } = useParams<{ exerciseId: string }>()
   const { exercises, loading, createExercise, updateExercise, deleteExercise } = useExercises()
   const { patterns } = useMovementPatterns()
   const { directions } = useDirections()
@@ -29,6 +32,16 @@ export function Exercises() {
 
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    if (!exerciseId || loading) return
+
+    const exercise = exercises.find(ex => ex.id === exerciseId)
+    if (exercise) {
+      setSelectedExercise(exercise)
+      setIsDetailOpen(true)
+    }
+  }, [exerciseId, exercises, loading])
 
   const handleSelect = (exercise: ExerciseWithRelations) => {
     setSelectedExercise(exercise)
@@ -118,7 +131,10 @@ export function Exercises() {
 
       <Modal
         isOpen={isDetailOpen}
-        onClose={() => setIsDetailOpen(false)}
+        onClose={() => {
+          setIsDetailOpen(false)
+          if (exerciseId) navigate('/exercises')
+        }}
         title={selectedExercise?.name || ''}
         size="lg"
       >
@@ -127,7 +143,10 @@ export function Exercises() {
             exercise={selectedExercise}
             onEdit={handleEdit}
             onDelete={handleDeleteConfirm}
-            onClose={() => setIsDetailOpen(false)}
+            onClose={() => {
+              setIsDetailOpen(false)
+              if (exerciseId) navigate('/exercises')
+            }}
           />
         )}
       </Modal>

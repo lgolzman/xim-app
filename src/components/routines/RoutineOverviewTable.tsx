@@ -39,9 +39,14 @@ export function RoutineOverviewTable({ routine }: RoutineOverviewTableProps) {
                           <span className="shrink-0 font-semibold text-gray-500">
                             {block.block_letter}{exercise.position}
                           </span>
-                          <span className="font-medium text-gray-900">
+                          <a
+                            href={`/exercises/${exercise.exercise_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-gray-900 hover:text-blue-700 hover:underline"
+                          >
                             {exercise.exercise?.name || 'Ejercicio sin nombre'}
-                          </span>
+                          </a>
                         </div>
                       </td>
                       {weekNumbers.map(week => (
