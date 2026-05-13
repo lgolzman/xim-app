@@ -93,8 +93,9 @@ export function StudentHome() {
                   </h2>
                 </div>
                 <Button
+                  variant="secondary"
                   onClick={() => handleStartWorkout(info.suggestedDay!.id)}
-                  className="bg-white text-gray-900 hover:bg-gray-100"
+                  className="border-transparent shadow-sm hover:bg-gray-100"
                 >
                   Empezar entrenamiento
                 </Button>

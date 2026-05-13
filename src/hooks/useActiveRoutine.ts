@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { createFetchAbortSignal } from './supabaseFetch'
 import type {
   RoutineWithDays,
   RoutineDay,
@@ -12,8 +13,11 @@ export function useActiveRoutine(studentId: string | undefined) {
   const [routine, setRoutine] = useState<RoutineWithDays | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isMountedRef = useRef(false)
 
-  const fetchActiveRoutine = useCallback(async () => {
+  const fetchActiveRoutine = useCallback(async (signal?: AbortSignal) => {
+    if (!isMountedRef.current) return
+
     if (!studentId) {
       setRoutine(null)
       setLoading(false)
@@ -22,9 +26,10 @@ export function useActiveRoutine(studentId: string | undefined) {
 
     setLoading(true)
     setError(null)
+    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from('routines')
         .select(`
           *,
@@ -37,7 +42,8 @@ export function useActiveRoutine(studentId: string | undefined) {
                 exercise:exercises(
                   *,
                   movement_pattern:movement_patterns(*),
-                  direction:directions(*)
+                  direction:directions(*),
+                  videos:exercise_videos(*)
                 ),
                 prescribed_sets(*)
               )
@@ -46,11 +52,13 @@ export function useActiveRoutine(studentId: string | undefined) {
         `)
         .eq('student_id', studentId)
         .eq('status', 'active')
-        .single()
+
+      const { data, error } = await query.abortSignal(requestSignal).single()
 
       if (error) {
         // Si no hay rutina activa, no es un error
         if (error.code === 'PGRST116') {
+          if (!isMountedRef.current) return
           setRoutine(null)
           setLoading(false)
           return
@@ -73,6 +81,11 @@ export function useActiveRoutine(studentId: string | undefined) {
                       a.week_number - b.week_number || a.set_number - b.set_number
                     )
                   }
+                  if (ex.exercise?.videos) {
+                    ex.exercise.videos.sort((a: { created_at: string }, b: { created_at: string }) =>
+                      a.created_at.localeCompare(b.created_at)
+                    )
+                  }
                 })
               }
             })
@@ -80,16 +93,29 @@ export function useActiveRoutine(studentId: string | undefined) {
         })
       }
 
+      if (!isMountedRef.current) return
       setRoutine(data as RoutineWithDays)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar rutina activa')
+      if (!isMountedRef.current) return
+      setError(err instanceof Error && err.name === 'AbortError'
+        ? 'La solicitud tardó demasiado. Intenta recargar la página.'
+        : err instanceof Error ? err.message : 'Error al cargar rutina activa')
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
+      cleanup()
     }
   }, [studentId])
 
   useEffect(() => {
-    fetchActiveRoutine()
+    isMountedRef.current = true
+    const controller = new AbortController()
+    fetchActiveRoutine(controller.signal)
+    return () => {
+      isMountedRef.current = false
+      controller.abort()
+    }
   }, [fetchActiveRoutine])
 
   // Obtener un día específico de la rutina

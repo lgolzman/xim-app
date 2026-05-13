@@ -3,12 +3,11 @@ import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { Layout } from '../components/layout/Layout'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
-import { Modal } from '../components/ui/Modal'
 import { useAuth } from '../context/AuthContext'
 import { useActiveRoutine } from '../hooks/useActiveRoutine'
 import { useWorkoutLogs } from '../hooks/useWorkoutLogs'
 import type { CreateLoggedSetData } from '../hooks/useWorkoutLogs'
-import type { RoutineDayWithBlocks, BlockExerciseWithDetails } from '../lib/types'
+import type { RoutineDayWithBlocks } from '../lib/types'
 
 interface SetInput {
   block_exercise_id: string
@@ -28,7 +27,7 @@ export function WorkoutExecution() {
   const weekNumber = parseInt(searchParams.get('week') || '1')
 
   const { user } = useAuth()
-  const { routine, loading: routineLoading, getDayById } = useActiveRoutine(user?.id)
+  const { routine, loading: routineLoading } = useActiveRoutine(user?.id)
   const { createWorkoutLog } = useWorkoutLogs(user?.id, routine?.id)
 
   const [day, setDay] = useState<RoutineDayWithBlocks | null>(null)
@@ -36,13 +35,11 @@ export function WorkoutExecution() {
   const [studentNote, setStudentNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [videoModalOpen, setVideoModalOpen] = useState(false)
-  const [selectedExercise, setSelectedExercise] = useState<BlockExerciseWithDetails | null>(null)
 
   // Inicializar datos del día cuando carga la rutina
   useEffect(() => {
     if (!routineLoading && dayId) {
-      const dayData = getDayById(dayId)
+      const dayData = routine?.routine_days.find(d => d.id === dayId)
       if (dayData) {
         setDay(dayData)
 
@@ -68,7 +65,7 @@ export function WorkoutExecution() {
         setSetInputs(inputs)
       }
     }
-  }, [routineLoading, dayId, getDayById, weekNumber])
+  }, [routineLoading, routine, dayId, weekNumber])
 
   const updateSetInput = (blockExerciseId: string, setNumber: number, field: string, value: string) => {
     setSetInputs(prev =>
@@ -124,7 +121,6 @@ export function WorkoutExecution() {
 
       if (createError) {
         setError(createError)
-        setSaving(false)
         return
       }
 
@@ -132,13 +128,13 @@ export function WorkoutExecution() {
       navigate('/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar entrenamiento')
+    } finally {
       setSaving(false)
     }
   }
 
-  const openVideoModal = (exercise: BlockExerciseWithDetails) => {
-    setSelectedExercise(exercise)
-    setVideoModalOpen(true)
+  const handleCancel = () => {
+    navigate(-1)
   }
 
   if (routineLoading) {
@@ -179,11 +175,14 @@ export function WorkoutExecution() {
                 {day.name && ` — ${day.name}`}
               </h1>
             </div>
-            <Link to="/">
-              <Button variant="ghost" className="text-white hover:bg-gray-800">
-                Cancelar
-              </Button>
-            </Link>
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-white hover:bg-gray-800"
+              onClick={handleCancel}
+            >
+              Cancelar
+            </Button>
           </div>
         </div>
 
@@ -207,6 +206,7 @@ export function WorkoutExecution() {
               <div className="divide-y divide-gray-100">
                 {block.block_exercises.map(exercise => {
                   const weekSets = exercise.prescribed_sets.filter(s => s.week_number === weekNumber)
+                  const videos = exercise.exercise?.videos || []
 
                   return (
                     <div key={exercise.id} className="p-4">
@@ -215,22 +215,27 @@ export function WorkoutExecution() {
                           <span className="text-xs text-gray-500 font-medium">
                             {block.block_letter}{exercise.position}
                           </span>
-                          <h3 className="font-semibold text-gray-900">{exercise.exercise?.name}</h3>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-semibold text-gray-900">{exercise.exercise?.name}</h3>
+                            {videos.map((video, index) => (
+                              <a
+                                key={video.id}
+                                href={video.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center rounded-md border border-blue-200 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                                title={video.title || `Video ${index + 1}`}
+                              >
+                                Video{videos.length > 1 ? ` ${index + 1}` : ''}
+                              </a>
+                            ))}
+                          </div>
                           {exercise.note && (
                             <p className="text-sm text-blue-600 mt-1 flex items-center gap-1">
                               <span>📝</span> {exercise.note}
                             </p>
                           )}
                         </div>
-                        {(exercise.exercise as any)?.videos?.length > 0 && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openVideoModal(exercise)}
-                          >
-                            📹 Ver video
-                          </Button>
-                        )}
                       </div>
 
                       {/* Series */}
@@ -319,31 +324,6 @@ export function WorkoutExecution() {
         </div>
       </div>
 
-      {/* Modal de video */}
-      <Modal
-        isOpen={videoModalOpen}
-        onClose={() => setVideoModalOpen(false)}
-        title={selectedExercise?.exercise?.name || 'Video'}
-        size="lg"
-      >
-        {selectedExercise && (selectedExercise.exercise as any)?.videos?.length > 0 && (
-          <div className="space-y-4">
-            {(selectedExercise.exercise as any).videos.map((video: any) => (
-              <div key={video.id}>
-                {video.title && <p className="text-sm text-gray-600 mb-2">{video.title}</p>}
-                <a
-                  href={video.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline break-all"
-                >
-                  {video.url}
-                </a>
-              </div>
-            ))}
-          </div>
-        )}
-      </Modal>
     </Layout>
   )
 }

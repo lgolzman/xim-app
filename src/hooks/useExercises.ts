@@ -1,18 +1,22 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { createFetchAbortSignal } from './supabaseFetch'
 import type { ExerciseWithRelations, ExerciseFormData, Exercise } from '../lib/types'
 
 export function useExercises() {
   const [exercises, setExercises] = useState<ExerciseWithRelations[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isMountedRef = useRef(false)
 
-  const fetchExercises = useCallback(async () => {
+  const fetchExercises = useCallback(async (signal?: AbortSignal) => {
+    if (!isMountedRef.current) return
     setLoading(true)
     setError(null)
+    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
-      const { data: exercisesData, error: exercisesError } = await supabase
+      const exercisesQuery = supabase
         .from('exercises')
         .select(`
           *,
@@ -21,23 +25,29 @@ export function useExercises() {
         `)
         .order('name')
 
+      const { data: exercisesData, error: exercisesError } = await exercisesQuery.abortSignal(requestSignal)
+
       if (exercisesError) throw exercisesError
 
       const exercisesWithMuscles = await Promise.all(
         (exercisesData || []).map(async (exercise: any) => {
+          const primaryMusclesQuery = supabase
+            .from('exercise_primary_muscles')
+            .select('muscle:muscles(*)')
+            .eq('exercise_id', exercise.id)
+          const synergistMusclesQuery = supabase
+            .from('exercise_synergist_muscles')
+            .select('muscle:muscles(*)')
+            .eq('exercise_id', exercise.id)
+          const videosQuery = supabase
+            .from('exercise_videos')
+            .select('*')
+            .eq('exercise_id', exercise.id)
+
           const [primaryMuscles, synergistMuscles, videos] = await Promise.all([
-            supabase
-              .from('exercise_primary_muscles')
-              .select('muscle:muscles(*)')
-              .eq('exercise_id', exercise.id),
-            supabase
-              .from('exercise_synergist_muscles')
-              .select('muscle:muscles(*)')
-              .eq('exercise_id', exercise.id),
-            supabase
-              .from('exercise_videos')
-              .select('*')
-              .eq('exercise_id', exercise.id),
+            primaryMusclesQuery.abortSignal(requestSignal),
+            synergistMusclesQuery.abortSignal(requestSignal),
+            videosQuery.abortSignal(requestSignal),
           ])
 
           return {
@@ -49,16 +59,29 @@ export function useExercises() {
         })
       )
 
+      if (!isMountedRef.current) return
       setExercises(exercisesWithMuscles)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar ejercicios')
+      if (!isMountedRef.current) return
+      setError(err instanceof Error && err.name === 'AbortError'
+        ? 'La solicitud tardó demasiado. Intenta recargar la página.'
+        : err instanceof Error ? err.message : 'Error al cargar ejercicios')
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
+      cleanup()
     }
   }, [])
 
   useEffect(() => {
-    fetchExercises()
+    isMountedRef.current = true
+    const controller = new AbortController()
+    fetchExercises(controller.signal)
+    return () => {
+      isMountedRef.current = false
+      controller.abort()
+    }
   }, [fetchExercises])
 
   const createExercise = async (data: ExerciseFormData) => {
