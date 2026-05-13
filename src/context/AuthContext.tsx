@@ -10,6 +10,7 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   isAdmin: boolean
+  isDisabled: boolean
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signUp: (email: string, password: string, token?: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
@@ -22,6 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isDisabled, setIsDisabled] = useState(false)
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -51,6 +53,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           const profile = await fetchProfile(session.user.id)
           if (didInit) return
+
+          // Verificar si la cuenta está inhabilitada
+          if (profile && profile.active === false) {
+            console.warn('Account is disabled, signing out')
+            setIsDisabled(true)
+            await supabase.auth.signOut()
+            setSession(null)
+            setUser(null)
+            setProfile(null)
+            return
+          }
+
+          setIsDisabled(false)
           setProfile(profile)
         }
       } catch (error) {
@@ -116,6 +131,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (session?.user) {
             const profile = await fetchProfile(session.user.id)
+
+            // Verificar si la cuenta está inhabilitada
+            if (profile && profile.active === false) {
+              console.warn('Account is disabled, signing out')
+              setIsDisabled(true)
+              await supabase.auth.signOut()
+              setSession(null)
+              setUser(null)
+              setProfile(null)
+              return
+            }
+
+            setIsDisabled(false)
             setProfile(profile)
           } else {
             setProfile(null)
@@ -240,6 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         loading,
         isAdmin,
+        isDisabled,
         signIn,
         signUp,
         signOut,

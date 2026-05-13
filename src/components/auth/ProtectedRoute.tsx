@@ -7,7 +7,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
-  const { user, loading, isAdmin } = useAuth()
+  const { user, loading, isAdmin, isDisabled } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -16,6 +16,11 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
       </div>
     )
+  }
+
+  // Si la cuenta está inhabilitada, redirigir a la página correspondiente
+  if (isDisabled) {
+    return <Navigate to="/account-disabled" replace />
   }
 
   if (!user) {

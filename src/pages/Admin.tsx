@@ -3,13 +3,15 @@ import { Layout } from '../components/layout/Layout'
 import { MovementPatternManager } from '../components/admin/MovementPatternManager'
 import { MuscleManager } from '../components/admin/MuscleManager'
 import { InvitationManager } from '../components/admin/InvitationManager'
+import { StudentManager } from '../components/admin/StudentManager'
 
-type Tab = 'patterns' | 'muscles' | 'invitations'
+type Tab = 'students' | 'patterns' | 'muscles' | 'invitations'
 
 export function Admin() {
-  const [activeTab, setActiveTab] = useState<Tab>('patterns')
+  const [activeTab, setActiveTab] = useState<Tab>('students')
 
   const tabs: { id: Tab; label: string }[] = [
+    { id: 'students', label: 'Alumnos' },
     { id: 'patterns', label: 'Patrones de Movimiento' },
     { id: 'muscles', label: 'Músculos' },
     { id: 'invitations', label: 'Invitaciones' },
@@ -45,6 +47,7 @@ export function Admin() {
           </div>
 
           <div className="p-6">
+            {activeTab === 'students' && <StudentManager />}
             {activeTab === 'patterns' && <MovementPatternManager />}
             {activeTab === 'muscles' && <MuscleManager />}
             {activeTab === 'invitations' && <InvitationManager />}
