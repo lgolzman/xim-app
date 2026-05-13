@@ -26,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [isDisabled, setIsDisabled] = useState(false)
   const disabledSignOutRef = useRef(false)
+  const visibilityRefreshRef = useRef(false)
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -130,8 +131,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     )
 
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState !== 'visible' || visibilityRefreshRef.current) return
+
+      visibilityRefreshRef.current = true
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!isMounted) return
+
+        setSession(session)
+        setUser(session?.user ?? null)
+
+        if (session?.user) {
+          const profile = await fetchProfile(session.user.id)
+          if (!isMounted) return
+
+          // Verificar si la cuenta está inhabilitada
+          if (profile && profile.active === false) {
+            console.warn('Account is disabled, signing out')
+            disabledSignOutRef.current = true
+            setIsDisabled(true)
+            await supabase.auth.signOut()
+            setSession(null)
+            setUser(null)
+            setProfile(null)
+            return
+          }
+
+          setIsDisabled(false)
+          setProfile(profile)
+        } else {
+          setIsDisabled(false)
+          setProfile(null)
+        }
+      } catch (error) {
+        console.error('Error refreshing auth on visibility change:', error)
+      } finally {
+        visibilityRefreshRef.current = false
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
       isMounted = false
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       subscription.unsubscribe()
     }
   }, [])
