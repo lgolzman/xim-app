@@ -6,6 +6,7 @@ import { Register } from './pages/Register'
 import { ResetPassword } from './pages/ResetPassword'
 import { AccountDisabled } from './pages/AccountDisabled'
 import { Home } from './pages/Home'
+import { Profile } from './pages/Profile'
 import { Exercises } from './pages/Exercises'
 import { WorkoutExecution } from './pages/WorkoutExecution'
 import { WorkoutHistory } from './pages/WorkoutHistory'
@@ -40,6 +41,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <Exercises />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
               </ProtectedRoute>
             }
           />
