@@ -15,13 +15,13 @@ export function StudentDetail() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { enableStudent, disableStudent } = useStudents()
-  const { routines, loading: routinesLoading, updateRoutineStatus, deleteRoutine } = useRoutines(studentId)
+  const { routines, loading: routinesLoading, updateRoutineStatus, reactivateArchivedRoutine, deleteRoutine } = useRoutines(studentId)
 
   const [student, setStudent] = useState<Student | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [actionType, setActionType] = useState<'enable' | 'disable' | 'activate' | 'archive' | 'delete' | null>(null)
+  const [actionType, setActionType] = useState<'enable' | 'disable' | 'activate' | 'reactivate' | 'archive' | 'delete' | null>(null)
   const [actionRoutineId, setActionRoutineId] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
 
@@ -53,7 +53,7 @@ export function StudentDetail() {
     setActionRoutineId(null)
   }
 
-  const handleRoutineAction = (routineId: string, type: 'activate' | 'archive' | 'delete') => {
+  const handleRoutineAction = (routineId: string, type: 'activate' | 'reactivate' | 'archive' | 'delete') => {
     setActionType(type)
     setActionRoutineId(routineId)
   }
@@ -65,13 +65,18 @@ export function StudentDetail() {
 
     try {
       if (actionType === 'enable') {
-        await enableStudent(student.id)
+        const { error } = await enableStudent(student.id)
+        if (error) throw new Error(error)
         setStudent({ ...student, active: true, disabled_by: null, disabled_at: null })
       } else if (actionType === 'disable') {
-        await disableStudent(student.id, user.id)
+        const { error } = await disableStudent(student.id, user.id)
+        if (error) throw new Error(error)
         setStudent({ ...student, active: false, disabled_by: user.id, disabled_at: new Date().toISOString() })
       } else if (actionType === 'activate' && actionRoutineId) {
         await updateRoutineStatus(actionRoutineId, 'active')
+      } else if (actionType === 'reactivate' && actionRoutineId) {
+        const { error } = await reactivateArchivedRoutine(actionRoutineId, student.id)
+        if (error) throw new Error(error)
       } else if (actionType === 'archive' && actionRoutineId) {
         await updateRoutineStatus(actionRoutineId, 'archived')
       } else if (actionType === 'delete' && actionRoutineId) {
@@ -116,6 +121,13 @@ export function StudentDetail() {
     const routine = routines.find(r => r.id === actionRoutineId)
     if (actionType === 'activate') {
       return `¿Activar la rutina "${routine?.name}"? Esto archivará cualquier otra rutina activa.`
+    }
+    if (actionType === 'reactivate') {
+      const activeRoutine = routines.find(r => r.status === 'active')
+      if (!activeRoutine) {
+        return `¿Querés reactivar "${routine?.name}"?`
+      }
+      return `¿Querés reactivar "${routine?.name}"? La rutina activa actual pasará a estado borrador.`
     }
     if (actionType === 'archive') {
       return `¿Archivar la rutina "${routine?.name}"?`
@@ -281,6 +293,15 @@ export function StudentDetail() {
                           Archivar
                         </Button>
                       )}
+                      {routine.status === 'archived' && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleRoutineAction(routine.id, 'reactivate')}
+                        >
+                          Reactivar
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -311,6 +332,7 @@ export function StudentDetail() {
           actionType === 'enable' ? 'Habilitar alumno' :
           actionType === 'disable' ? 'Inhabilitar alumno' :
           actionType === 'activate' ? 'Activar rutina' :
+          actionType === 'reactivate' ? 'Reactivar rutina' :
           actionType === 'archive' ? 'Archivar rutina' :
           actionType === 'delete' ? 'Eliminar rutina' : ''
         }
@@ -319,6 +341,7 @@ export function StudentDetail() {
           actionType === 'enable' ? 'Habilitar' :
           actionType === 'disable' ? 'Inhabilitar' :
           actionType === 'activate' ? 'Activar' :
+          actionType === 'reactivate' ? 'Reactivar' :
           actionType === 'archive' ? 'Archivar' :
           actionType === 'delete' ? 'Eliminar' : ''
         }

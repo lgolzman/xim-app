@@ -60,6 +60,8 @@ export function useStudents() {
           disabled_at: null,
         })
         .eq('id', studentId)
+        .select('id')
+        .single()
 
       if (error) throw error
       await fetchStudents()
@@ -79,6 +81,8 @@ export function useStudents() {
           disabled_at: new Date().toISOString(),
         })
         .eq('id', studentId)
+        .select('id')
+        .single()
 
       if (error) throw error
       await fetchStudents()

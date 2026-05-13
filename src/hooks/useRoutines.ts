@@ -257,6 +257,32 @@ export function useRoutines(studentId?: string) {
     }
   }
 
+  const reactivateArchivedRoutine = async (routineId: string, studentId: string): Promise<{ error: string | null }> => {
+    try {
+      const { error: draftActiveError } = await supabase
+        .from('routines')
+        .update({ status: 'draft' })
+        .eq('student_id', studentId)
+        .eq('status', 'active')
+        .neq('id', routineId)
+
+      if (draftActiveError) throw draftActiveError
+
+      const { error: activateError } = await supabase
+        .from('routines')
+        .update({ status: 'active' })
+        .eq('id', routineId)
+        .eq('status', 'archived')
+
+      if (activateError) throw activateError
+
+      await fetchRoutines()
+      return { error: null }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : 'Error al reactivar rutina' }
+    }
+  }
+
   // Actualizar nombre de la rutina
   const updateRoutineName = async (routineId: string, name: string): Promise<{ error: string | null }> => {
     try {
@@ -298,6 +324,7 @@ export function useRoutines(studentId?: string) {
     getRoutineWithDetails,
     createRoutine,
     updateRoutineStatus,
+    reactivateArchivedRoutine,
     updateRoutineName,
     deleteRoutine,
   }
