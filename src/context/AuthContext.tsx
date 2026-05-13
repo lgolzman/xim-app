@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [isDisabled, setIsDisabled] = useState(false)
+  const disabledSignOutRef = useRef(false)
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -58,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Verificar si la cuenta está inhabilitada
           if (profile && profile.active === false) {
             console.warn('Account is disabled, signing out')
+            disabledSignOutRef.current = true
             setIsDisabled(true)
             await supabase.auth.signOut()
             setSession(null)
@@ -98,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Verificar si la cuenta está inhabilitada
             if (profile && profile.active === false) {
               console.warn('Account is disabled, signing out')
+              disabledSignOutRef.current = true
               setIsDisabled(true)
               await supabase.auth.signOut()
               setSession(null)
@@ -109,7 +112,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsDisabled(false)
             setProfile(profile)
           } else {
-            setIsDisabled(false)
+            if (disabledSignOutRef.current) {
+              disabledSignOutRef.current = false
+              setIsDisabled(true)
+            } else {
+              setIsDisabled(false)
+            }
             setProfile(null)
           }
         } catch (error) {
@@ -169,10 +177,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
+    disabledSignOutRef.current = false
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)
     setSession(null)
+    setIsDisabled(false)
   }
 
   const refreshProfile = async () => {
