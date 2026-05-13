@@ -79,7 +79,7 @@ export function StudentManager() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-gray-900 font-medium truncate">
-                    {student.email}
+                    {student.name || student.email}
                   </span>
                   {student.active === false ? (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
@@ -92,6 +92,7 @@ export function StudentManager() {
                   )}
                 </div>
                 <div className="text-sm text-gray-500 mt-1">
+                  {student.name && <span className="mr-2">{student.email} ·</span>}
                   Registrado: {formatDate(student.created_at)}
                   {student.active === false && student.disabled_at && (
                     <span className="ml-2">
@@ -141,8 +142,8 @@ export function StudentManager() {
         title={actionType === 'enable' ? 'Habilitar alumno' : 'Inhabilitar alumno'}
         message={
           actionType === 'enable'
-            ? `¿Estás segura de habilitar a "${actionStudent?.email}"? Podrá volver a acceder a la aplicación.`
-            : `¿Estás segura de inhabilitar a "${actionStudent?.email}"? No podrá acceder a la aplicación hasta que lo vuelvas a habilitar.`
+            ? `¿Estás segura de habilitar a "${actionStudent?.name || actionStudent?.email}"? Podrá volver a acceder a la aplicación.`
+            : `¿Estás segura de inhabilitar a "${actionStudent?.name || actionStudent?.email}"? No podrá acceder a la aplicación hasta que lo vuelvas a habilitar.`
         }
         confirmText={actionType === 'enable' ? 'Habilitar' : 'Inhabilitar'}
         loading={processing}

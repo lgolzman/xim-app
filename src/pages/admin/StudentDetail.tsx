@@ -106,11 +106,12 @@ export function StudentDetail() {
   }
 
   const getActionMessage = () => {
+    const studentName = student?.name || student?.email
     if (actionType === 'enable') {
-      return `¿Estás segura de habilitar a "${student?.email}"?`
+      return `¿Estás segura de habilitar a "${studentName}"?`
     }
     if (actionType === 'disable') {
-      return `¿Estás segura de inhabilitar a "${student?.email}"?`
+      return `¿Estás segura de inhabilitar a "${studentName}"?`
     }
     const routine = routines.find(r => r.id === actionRoutineId)
     if (actionType === 'activate') {
@@ -159,7 +160,10 @@ export function StudentDetail() {
               <span>/</span>
               <span>Alumno</span>
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">{student.email}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{student.name || student.email}</h1>
+            {student.name && (
+              <p className="text-sm text-gray-500">{student.email}</p>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {student.active !== false ? (

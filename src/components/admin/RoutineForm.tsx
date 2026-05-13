@@ -498,7 +498,7 @@ export function RoutineForm({
               label="Alumno"
               value={formData.student_id}
               onChange={(e) => updateFormData({ student_id: e.target.value })}
-              options={students.map(s => ({ value: s.id, label: s.email }))}
+              options={students.map(s => ({ value: s.id, label: s.name ? `${s.name} (${s.email})` : s.email }))}
               placeholder="Seleccionar alumno"
               disabled={!!studentId || studentsLoading}
             />
