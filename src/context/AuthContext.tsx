@@ -163,55 +163,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Handle visibility change - refresh session when user returns to tab
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible' && session) {
-        console.log('[Auth] Tab became visible, checking session...')
-
-        let refreshCompleted = false
-        const timeoutId = setTimeout(() => {
-          if (!refreshCompleted) {
-            console.warn('[Auth] Session refresh timed out - clearing session and reloading')
-            // Clear Supabase storage and reload
-            try {
-              const keys = Object.keys(localStorage).filter(key =>
-                key.startsWith('sb-') || key.includes('supabase')
-              )
-              keys.forEach(key => localStorage.removeItem(key))
-              window.location.reload()
-            } catch (e) {
-              console.error('Error clearing session storage:', e)
-            }
-          }
-        }, 5000)
-
-        try {
-          const { error } = await supabase.auth.refreshSession()
-          refreshCompleted = true
-          clearTimeout(timeoutId)
-
-          if (error) {
-            console.error('[Auth] Session refresh failed:', error)
-            // Session invalid, clear state
-            setSession(null)
-            setUser(null)
-            setProfile(null)
-          } else {
-            console.log('[Auth] Session refreshed successfully')
-          }
-        } catch (error) {
-          refreshCompleted = true
-          clearTimeout(timeoutId)
-          console.error('[Auth] Session refresh error:', error)
-        }
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [session])
-
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,

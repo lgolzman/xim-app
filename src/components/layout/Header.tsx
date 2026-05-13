@@ -67,9 +67,9 @@ export function Header() {
           {user && (
             <div className="flex items-center gap-4">
               <div className="hidden sm:flex items-center gap-2 text-sm">
-                <Link to="/profile" className="text-gray-600 hover:text-gray-900">
-                  {profile?.name || profile?.email}
-                </Link>
+                <span className="text-gray-600">
+                  {profile?.full_name || profile?.name || profile?.email}
+                </span>
                 <span
                   className={`
                     px-2 py-0.5 rounded-full text-xs font-medium
@@ -164,13 +164,9 @@ export function Header() {
               )}
             </nav>
             <div className="sm:hidden mt-3 pt-3 border-t border-gray-200 px-3">
-              <Link
-                to="/profile"
-                className="text-sm text-gray-600 hover:text-gray-900"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                {profile?.name || profile?.email}
-              </Link>
+              <span className="text-sm text-gray-600">
+                {profile?.full_name || profile?.name || profile?.email}
+              </span>
               <span
                 className={`
                   ml-2 px-2 py-0.5 rounded-full text-xs font-medium

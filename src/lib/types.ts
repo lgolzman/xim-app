@@ -4,6 +4,7 @@ export type ChainType = 'abierta' | 'cerrada'
 export interface Profile {
   id: string
   email: string
+  full_name?: string | null
   name?: string | null
   role: UserRole
   created_at: string
@@ -15,6 +16,7 @@ export interface Profile {
 export interface Invitation {
   id: string
   email: string
+  invited_name?: string | null
   role: UserRole
   token: string
   used: boolean

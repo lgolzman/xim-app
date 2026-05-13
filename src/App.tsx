@@ -48,6 +48,15 @@ function App() {
           />
 
           <Route
+            path="/exercises/:exerciseId"
+            element={
+              <ProtectedRoute>
+                <Exercises />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/profile"
             element={
               <ProtectedRoute>

@@ -216,7 +216,14 @@ export function WorkoutExecution() {
                             {block.block_letter}{exercise.position}
                           </span>
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-semibold text-gray-900">{exercise.exercise?.name}</h3>
+                            <a
+                              href={`/exercises/${exercise.exercise_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-semibold text-gray-900 hover:text-blue-700 hover:underline"
+                            >
+                              {exercise.exercise?.name}
+                            </a>
                             {videos.map((video, index) => (
                               <a
                                 key={video.id}
