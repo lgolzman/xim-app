@@ -20,12 +20,38 @@ export function Header() {
 
             {user && (
               <nav className="hidden md:flex items-center gap-6">
-                <Link
-                  to="/"
-                  className="text-gray-600 hover:text-gray-900 text-sm font-medium"
-                >
-                  Ejercicios
-                </Link>
+                {!isAdmin && (
+                  <Link
+                    to="/"
+                    className="text-gray-600 hover:text-gray-900 text-sm font-medium"
+                  >
+                    Entrenar
+                  </Link>
+                )}
+                {!isAdmin && (
+                  <Link
+                    to="/exercises"
+                    className="text-gray-600 hover:text-gray-900 text-sm font-medium"
+                  >
+                    Ejercicios
+                  </Link>
+                )}
+                {!isAdmin && (
+                  <Link
+                    to="/routine"
+                    className="text-gray-600 hover:text-gray-900 text-sm font-medium"
+                  >
+                    Mi rutina
+                  </Link>
+                )}
+                {!isAdmin && (
+                  <Link
+                    to="/history"
+                    className="text-gray-600 hover:text-gray-900 text-sm font-medium"
+                  >
+                    Historial
+                  </Link>
+                )}
                 {isAdmin && (
                   <Link
                     to="/admin"
@@ -91,13 +117,42 @@ export function Header() {
         {user && isMobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200 py-3">
             <nav className="flex flex-col gap-2">
-              <Link
-                to="/"
-                className="px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-sm font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Ejercicios
-              </Link>
+              {!isAdmin && (
+                <Link
+                  to="/"
+                  className="px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-sm font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Entrenar
+                </Link>
+              )}
+              {!isAdmin && (
+                <Link
+                  to="/exercises"
+                  className="px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-sm font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Ejercicios
+                </Link>
+              )}
+              {!isAdmin && (
+                <Link
+                  to="/routine"
+                  className="px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-sm font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Mi rutina
+                </Link>
+              )}
+              {!isAdmin && (
+                <Link
+                  to="/history"
+                  className="px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-sm font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Historial
+                </Link>
+              )}
               {isAdmin && (
                 <Link
                   to="/admin"

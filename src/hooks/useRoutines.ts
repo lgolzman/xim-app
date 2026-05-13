@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { createFetchAbortSignal } from './supabaseFetch'
 import type {
   Routine,
   RoutineWithStudent,
@@ -50,10 +51,13 @@ export function useRoutines(studentId?: string) {
   const [routines, setRoutines] = useState<RoutineWithStudent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isMountedRef = useRef(false)
 
-  const fetchRoutines = useCallback(async () => {
+  const fetchRoutines = useCallback(async (signal?: AbortSignal) => {
+    if (!isMountedRef.current) return
     setLoading(true)
     setError(null)
+    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
       let query = supabase
@@ -68,23 +72,36 @@ export function useRoutines(studentId?: string) {
         query = query.eq('student_id', studentId)
       }
 
-      const { data, error } = await query
+      const { data, error } = await query.abortSignal(requestSignal)
 
       if (error) throw error
+      if (!isMountedRef.current) return
       setRoutines((data || []) as RoutineWithStudent[])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar rutinas')
+      if (!isMountedRef.current) return
+      setError(err instanceof Error && err.name === 'AbortError'
+        ? 'La solicitud tardó demasiado. Intenta recargar la página.'
+        : err instanceof Error ? err.message : 'Error al cargar rutinas')
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
+      cleanup()
     }
   }, [studentId])
 
   useEffect(() => {
-    fetchRoutines()
+    isMountedRef.current = true
+    const controller = new AbortController()
+    fetchRoutines(controller.signal)
+    return () => {
+      isMountedRef.current = false
+      controller.abort()
+    }
   }, [fetchRoutines])
 
   // Obtener una rutina con todos sus detalles (días, bloques, ejercicios, series)
-  const getRoutineWithDetails = async (routineId: string): Promise<{ data: RoutineWithDays | null; error: string | null }> => {
+  const getRoutineWithDetails = useCallback(async (routineId: string): Promise<{ data: RoutineWithDays | null; error: string | null }> => {
     try {
       const { data, error } = await supabase
         .from('routines')
@@ -133,7 +150,7 @@ export function useRoutines(studentId?: string) {
     } catch (err) {
       return { data: null, error: err instanceof Error ? err.message : 'Error al cargar rutina' }
     }
-  }
+  }, [])
 
   // Crear una rutina completa con todos sus datos anidados
   const createRoutine = async (data: CreateRoutineData, createdBy: string): Promise<{ data: Routine | null; error: string | null }> => {

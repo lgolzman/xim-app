@@ -11,11 +11,13 @@ import { Exercises } from './pages/Exercises'
 import { WorkoutExecution } from './pages/WorkoutExecution'
 import { WorkoutHistory } from './pages/WorkoutHistory'
 import { WorkoutDetail } from './pages/WorkoutDetail'
+import { RoutineOverview } from './pages/RoutineOverview'
 import { Admin } from './pages/Admin'
 import { StudentDetail } from './pages/admin/StudentDetail'
 import { AdminWorkoutDetail } from './pages/admin/AdminWorkoutDetail'
 import { RoutineNew } from './pages/admin/RoutineNew'
 import { RoutineEdit } from './pages/admin/RoutineEdit'
+import { RoutineOverviewAdmin } from './pages/admin/RoutineOverviewAdmin'
 
 function App() {
   return (
@@ -82,6 +84,15 @@ function App() {
           />
 
           <Route
+            path="/routine"
+            element={
+              <ProtectedRoute>
+                <RoutineOverview />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/admin"
             element={
               <ProtectedRoute requireAdmin>
@@ -122,6 +133,15 @@ function App() {
             element={
               <ProtectedRoute requireAdmin>
                 <RoutineEdit />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/routines/:routineId/view"
+            element={
+              <ProtectedRoute requireAdmin>
+                <RoutineOverviewAdmin />
               </ProtectedRoute>
             }
           />

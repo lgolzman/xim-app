@@ -285,6 +285,11 @@ export function RoutineEdit() {
                 Archivada
               </span>
             )}
+            <Link to={`/admin/routines/${routine.id}/view`}>
+              <Button variant="secondary" size="sm">
+                Ver rutina completa
+              </Button>
+            </Link>
           </div>
         </div>
 

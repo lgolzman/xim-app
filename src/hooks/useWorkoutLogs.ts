@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { createFetchAbortSignal } from './supabaseFetch'
 import type { WorkoutLog, WorkoutLogWithDetails, LoggedSet } from '../lib/types'
 
 export interface CreateWorkoutLogData {
@@ -22,8 +23,11 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
   const [logs, setLogs] = useState<WorkoutLogWithDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isMountedRef = useRef(false)
 
-  const fetchLogs = useCallback(async () => {
+  const fetchLogs = useCallback(async (signal?: AbortSignal) => {
+    if (!isMountedRef.current) return
+
     if (!studentId) {
       setLogs([])
       setLoading(false)
@@ -32,6 +36,7 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
 
     setLoading(true)
     setError(null)
+    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
       let query = supabase
@@ -48,7 +53,7 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
         query = query.eq('routine_id', routineId)
       }
 
-      const { data, error } = await query
+      const { data, error } = await query.abortSignal(requestSignal)
 
       if (error) throw error
 
@@ -60,16 +65,29 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
         ) || []
       }))
 
+      if (!isMountedRef.current) return
       setLogs(logsWithSortedSets as WorkoutLogWithDetails[])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar historial')
+      if (!isMountedRef.current) return
+      setError(err instanceof Error && err.name === 'AbortError'
+        ? 'La solicitud tardó demasiado. Intenta recargar la página.'
+        : err instanceof Error ? err.message : 'Error al cargar historial')
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
+      cleanup()
     }
   }, [studentId, routineId])
 
   useEffect(() => {
-    fetchLogs()
+    isMountedRef.current = true
+    const controller = new AbortController()
+    fetchLogs(controller.signal)
+    return () => {
+      isMountedRef.current = false
+      controller.abort()
+    }
   }, [fetchLogs])
 
   // Obtener el último workout log
@@ -146,7 +164,7 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
         if (setsError) throw setsError
       }
 
-      await fetchLogs()
+      void fetchLogs()
       return { data: log as WorkoutLog, error: null }
     } catch (err) {
       return { data: null, error: err instanceof Error ? err.message : 'Error al guardar entrenamiento' }

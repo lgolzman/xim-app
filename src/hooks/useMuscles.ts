@@ -1,53 +1,52 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { createFetchAbortSignal } from './supabaseFetch'
 import type { Muscle } from '../lib/types'
 
 export function useMuscles() {
   const [muscles, setMuscles] = useState<Muscle[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isMountedRef = useRef(false)
 
-  const fetchMuscles = useCallback(async () => {
-    console.log('[useMuscles] fetchMuscles called, setting loading=true')
+  const fetchMuscles = useCallback(async (signal?: AbortSignal) => {
+    if (!isMountedRef.current) return
     setLoading(true)
     setError(null)
-
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => {
-      console.warn('[useMuscles] Request timed out after 10s')
-      controller.abort()
-    }, 10000)
+    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from('muscles')
         .select('*')
         .order('name')
-        .abortSignal(controller.signal)
 
-      clearTimeout(timeoutId)
-      console.log('[useMuscles] Request complete:', data?.length, 'items')
+      const { data, error } = await query.abortSignal(requestSignal)
+
       if (error) throw error
+      if (!isMountedRef.current) return
       setMuscles(data || [])
     } catch (err) {
-      clearTimeout(timeoutId)
-      if (err instanceof Error && err.name === 'AbortError') {
-        console.error('[useMuscles] Request aborted (timeout)')
-        setError('La solicitud tardó demasiado. Intenta recargar la página.')
-      } else {
-        console.error('[useMuscles] Error:', err)
-        setError(err instanceof Error ? err.message : 'Error al cargar músculos')
-      }
+      if (!isMountedRef.current) return
+      setError(err instanceof Error && err.name === 'AbortError'
+        ? 'La solicitud tardó demasiado. Intenta recargar la página.'
+        : err instanceof Error ? err.message : 'Error al cargar músculos')
     } finally {
-      console.log('[useMuscles] Finally: setting loading=false')
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
+      cleanup()
     }
   }, [])
 
   useEffect(() => {
-    console.log('[useMuscles] useEffect mounted')
-    fetchMuscles()
-    return () => console.log('[useMuscles] useEffect cleanup')
+    isMountedRef.current = true
+    const controller = new AbortController()
+    fetchMuscles(controller.signal)
+    return () => {
+      isMountedRef.current = false
+      controller.abort()
+    }
   }, [fetchMuscles])
 
   const createMuscle = async (name: string) => {

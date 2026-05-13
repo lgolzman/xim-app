@@ -159,8 +159,12 @@ export interface RoutineWithStudent extends Routine {
   student: Student
 }
 
+export interface ExerciseInRoutine extends Exercise {
+  videos?: ExerciseVideo[]
+}
+
 export interface BlockExerciseWithDetails extends BlockExercise {
-  exercise: Exercise
+  exercise: ExerciseInRoutine
   prescribed_sets: PrescribedSet[]
 }
 

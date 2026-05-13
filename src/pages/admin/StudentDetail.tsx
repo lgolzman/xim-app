@@ -241,6 +241,11 @@ export function StudentDetail() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Link to={`/admin/routines/${routine.id}/view`}>
+                        <Button variant="secondary" size="sm">
+                          Ver rutina completa
+                        </Button>
+                      </Link>
                       <Link to={`/admin/routines/${routine.id}/edit`}>
                         <Button variant="ghost" size="sm">
                           {routine.status === 'archived' ? 'Ver' : 'Editar'}

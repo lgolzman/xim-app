@@ -1,33 +1,52 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { createFetchAbortSignal } from './supabaseFetch'
 import type { Invitation, UserRole } from '../lib/types'
 
 export function useInvitations() {
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const isMountedRef = useRef(false)
 
-  const fetchInvitations = useCallback(async () => {
+  const fetchInvitations = useCallback(async (signal?: AbortSignal) => {
+    if (!isMountedRef.current) return
     setLoading(true)
     setError(null)
+    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from('invitations')
         .select('*')
         .order('created_at', { ascending: false })
 
+      const { data, error } = await query.abortSignal(requestSignal)
+
       if (error) throw error
+      if (!isMountedRef.current) return
       setInvitations(data || [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar invitaciones')
+      if (!isMountedRef.current) return
+      setError(err instanceof Error && err.name === 'AbortError'
+        ? 'La solicitud tardó demasiado. Intenta recargar la página.'
+        : err instanceof Error ? err.message : 'Error al cargar invitaciones')
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
+      cleanup()
     }
   }, [])
 
   useEffect(() => {
-    fetchInvitations()
+    isMountedRef.current = true
+    const controller = new AbortController()
+    fetchInvitations(controller.signal)
+    return () => {
+      isMountedRef.current = false
+      controller.abort()
+    }
   }, [fetchInvitations])
 
   const createInvitation = async (email: string, role: UserRole) => {
