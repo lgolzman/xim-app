@@ -3,19 +3,28 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Layout } from '../../components/layout/Layout'
 import { RoutineForm } from '../../components/admin/RoutineForm'
 import type { RoutineFormData } from '../../components/admin/RoutineForm'
+import { Button } from '../../components/ui/Button'
+import { Modal } from '../../components/ui/Modal'
+import { Select } from '../../components/ui/Select'
 import { useRoutines } from '../../hooks/useRoutines'
 import type { CreateRoutineData } from '../../hooks/useRoutines'
 import { useAuth } from '../../context/AuthContext'
+import type { RoutineWithDays, PrescribedSet } from '../../lib/types'
 
 export function RoutineNew() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const studentId = searchParams.get('studentId') || undefined
   const { user } = useAuth()
-  const { createRoutine, updateRoutineStatus } = useRoutines()
+  const { routines, loading: routinesLoading, createRoutine, updateRoutineStatus, getRoutineWithDetails } = useRoutines()
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [copyModalOpen, setCopyModalOpen] = useState(false)
+  const [selectedRoutineId, setSelectedRoutineId] = useState('')
+  const [copying, setCopying] = useState(false)
+  const [initialFormData, setInitialFormData] = useState<RoutineFormData | undefined>(undefined)
+  const [formKey, setFormKey] = useState(0)
 
   const handleSubmit = async (formData: RoutineFormData, action: 'draft' | 'active') => {
     if (!user) return
@@ -86,6 +95,34 @@ export function RoutineNew() {
     }
   }
 
+  const handleCopyRoutine = async () => {
+    if (!selectedRoutineId) return
+
+    setCopying(true)
+    setError(null)
+
+    const { data, error } = await getRoutineWithDetails(selectedRoutineId)
+    if (error || !data) {
+      setError(error || 'No se pudo cargar la rutina seleccionada')
+      setCopying(false)
+      return
+    }
+
+    setInitialFormData(routineToFormData(data))
+    setFormKey(prev => prev + 1)
+    setCopying(false)
+    setCopyModalOpen(false)
+    setSelectedRoutineId('')
+  }
+
+  const routineOptions = routines.map(routine => {
+    const studentName = routine.student?.full_name || routine.student?.name || routine.student?.email || 'Alumno'
+    return {
+      value: routine.id,
+      label: `${routine.name} · ${studentName} · ${getStatusLabel(routine.status)}`,
+    }
+  })
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -98,6 +135,23 @@ export function RoutineNew() {
           <h1 className="text-2xl font-bold text-gray-900">Nueva rutina</h1>
         </div>
 
+        <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="font-semibold text-gray-900">Copiar rutina existente</h2>
+            <p className="text-sm text-gray-500">
+              Usá una rutina anterior como punto de partida y editá la copia libremente.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setCopyModalOpen(true)}
+            disabled={routinesLoading || routines.length === 0}
+          >
+            Empezar desde una rutina existente
+          </Button>
+        </div>
+
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
             {error}
@@ -105,12 +159,131 @@ export function RoutineNew() {
         )}
 
         <RoutineForm
-          studentId={studentId}
+          key={formKey}
+          initialData={initialFormData}
+          studentId={initialFormData ? undefined : studentId}
           onSubmit={handleSubmit}
           onCancel={handleCancel}
           loading={loading}
         />
       </div>
+
+      <Modal
+        isOpen={copyModalOpen}
+        onClose={() => {
+          setCopyModalOpen(false)
+          setSelectedRoutineId('')
+        }}
+        title="Copiar rutina existente"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {routines.length === 0 ? (
+            <p className="text-sm text-gray-500">Todavía no hay rutinas disponibles para copiar.</p>
+          ) : (
+            <Select
+              label="Rutina"
+              value={selectedRoutineId}
+              onChange={(e) => setSelectedRoutineId(e.target.value)}
+              options={routineOptions}
+              placeholder="Seleccionar rutina"
+              disabled={routinesLoading || copying}
+            />
+          )}
+
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setCopyModalOpen(false)
+                setSelectedRoutineId('')
+              }}
+              disabled={copying}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCopyRoutine}
+              disabled={!selectedRoutineId || copying}
+            >
+              {copying ? 'Copiando...' : 'Usar como base'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </Layout>
   )
+}
+
+function routineToFormData(routine: RoutineWithDays): RoutineFormData {
+  return {
+    student_id: '',
+    name: '',
+    total_weeks: routine.total_weeks,
+    days: routine.routine_days.map(day => ({
+      id: generateFormId(),
+      day_number: day.day_number,
+      name: day.name || '',
+      blocks: day.routine_blocks.map(block => ({
+        id: generateFormId(),
+        block_letter: block.block_letter,
+        block_order: block.block_order,
+        exercises: block.block_exercises.map(exercise => ({
+          id: generateFormId(),
+          exercise_id: exercise.exercise_id,
+          exercise: exercise.exercise,
+          position: exercise.position,
+          note: exercise.note || '',
+          weeks: Array.from({ length: routine.total_weeks }, (_, index) => {
+            const weekNumber = index + 1
+            const weekSets = exercise.prescribed_sets.filter(set => set.week_number === weekNumber)
+
+            return {
+              week_number: weekNumber,
+              sets: weekSets.length > 0
+                ? weekSets.map(set => formSetFromPrescribedSet(set))
+                : [createDefaultFormSet()],
+            }
+          }),
+        })),
+      })),
+    })),
+  }
+}
+
+function formSetFromPrescribedSet(set: PrescribedSet) {
+  return {
+    id: generateFormId(),
+    set_type: set.set_type,
+    quantity: set.quantity,
+    weight_kg: set.weight_kg?.toString() || '',
+  }
+}
+
+function createDefaultFormSet() {
+  return {
+    id: generateFormId(),
+    set_type: 'reps' as const,
+    quantity: 8,
+    weight_kg: '',
+  }
+}
+
+function generateFormId() {
+  return Math.random().toString(36).substring(2, 11)
+}
+
+function getStatusLabel(status: string) {
+  switch (status) {
+    case 'active':
+      return 'Activa'
+    case 'archived':
+      return 'Archivada'
+    case 'draft':
+      return 'Borrador'
+    default:
+      return status
+  }
 }

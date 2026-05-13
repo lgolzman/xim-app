@@ -41,19 +41,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>
-    let didInit = false
+    let isMounted = true
 
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        if (didInit) return // Timeout already fired
+        if (!isMounted) return
+
         setSession(session)
         setUser(session?.user ?? null)
 
         if (session?.user) {
           const profile = await fetchProfile(session.user.id)
-          if (didInit) return
+          if (!isMounted) return
 
           // Verificar si la cuenta está inhabilitada
           if (profile && profile.active === false) {
@@ -68,70 +68,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           setIsDisabled(false)
           setProfile(profile)
+        } else {
+          setIsDisabled(false)
+          setProfile(null)
         }
       } catch (error) {
         console.error('Error initializing auth:', error)
-        // Reset to logged-out state on error
-        setSession(null)
-        setUser(null)
-        setProfile(null)
       } finally {
-        if (!didInit) {
-          didInit = true
+        if (isMounted) {
           setLoading(false)
         }
       }
     }
-
-    // Fallback timeout: if auth takes more than 5s, clear session and reload
-    timeoutId = setTimeout(async () => {
-      if (!didInit) {
-        didInit = true
-
-        // Check if we already tried to recover (prevent infinite reload loop)
-        const recoveryAttempted = sessionStorage.getItem('auth-recovery-attempted')
-        if (recoveryAttempted) {
-          console.warn('Auth initialization timed out after recovery attempt')
-          sessionStorage.removeItem('auth-recovery-attempted')
-          setSession(null)
-          setUser(null)
-          setProfile(null)
-          setLoading(false)
-          return
-        }
-
-        console.warn('Auth initialization timed out - clearing session and reloading')
-        try {
-          // Mark that we're attempting recovery
-          sessionStorage.setItem('auth-recovery-attempted', 'true')
-          // Clear Supabase storage keys from localStorage
-          const keys = Object.keys(localStorage).filter(key =>
-            key.startsWith('sb-') || key.includes('supabase')
-          )
-          keys.forEach(key => localStorage.removeItem(key))
-          // Force a page reload to get a fresh Supabase client
-          window.location.reload()
-        } catch (e) {
-          console.error('Error clearing session storage:', e)
-          sessionStorage.removeItem('auth-recovery-attempted')
-          setSession(null)
-          setUser(null)
-          setProfile(null)
-          setLoading(false)
-        }
-      }
-    }, 5000)
 
     initAuth()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         try {
+          if (!isMounted) return
+
           setSession(session)
           setUser(session?.user ?? null)
 
           if (session?.user) {
             const profile = await fetchProfile(session.user.id)
+            if (!isMounted) return
 
             // Verificar si la cuenta está inhabilitada
             if (profile && profile.active === false) {
@@ -147,18 +109,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsDisabled(false)
             setProfile(profile)
           } else {
+            setIsDisabled(false)
             setProfile(null)
           }
         } catch (error) {
           console.error('Error in auth state change:', error)
         } finally {
-          setLoading(false)
+          if (isMounted) {
+            setLoading(false)
+          }
         }
       }
     )
 
     return () => {
-      clearTimeout(timeoutId)
+      isMounted = false
       subscription.unsubscribe()
     }
   }, [])
