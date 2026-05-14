@@ -156,12 +156,22 @@ export interface LoggedSet {
   actual_seconds: number | null
 }
 
+export interface WorkoutExerciseNote {
+  id: string
+  workout_log_id: string
+  block_exercise_id: string
+  note: string
+  created_at: string
+}
+
 // Tipos con relaciones para queries complejas
 export interface RoutineWithStudent extends Routine {
   student: Student
 }
 
 export interface ExerciseInRoutine extends Exercise {
+  movement_pattern?: MovementPattern | null
+  direction?: Direction | null
   videos?: ExerciseVideo[]
 }
 
@@ -185,4 +195,5 @@ export interface RoutineWithDays extends Routine {
 export interface WorkoutLogWithDetails extends WorkoutLog {
   routine_day: RoutineDay
   logged_sets: LoggedSet[]
+  workout_exercise_notes?: WorkoutExerciseNote[]
 }

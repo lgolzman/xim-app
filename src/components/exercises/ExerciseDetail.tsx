@@ -7,9 +7,10 @@ interface ExerciseDetailProps {
   onEdit: () => void
   onDelete: () => void
   onClose: () => void
+  showAdminActions?: boolean
 }
 
-export function ExerciseDetail({ exercise, onEdit, onDelete, onClose }: ExerciseDetailProps) {
+export function ExerciseDetail({ exercise, onEdit, onDelete, onClose, showAdminActions = true }: ExerciseDetailProps) {
   const { isAdmin } = useAuth()
 
   return (
@@ -98,7 +99,7 @@ export function ExerciseDetail({ exercise, onEdit, onDelete, onClose }: Exercise
         <Button variant="secondary" onClick={onClose}>
           Cerrar
         </Button>
-        {isAdmin && (
+        {isAdmin && showAdminActions && (
           <>
             <Button variant="danger" onClick={onDelete}>
               Eliminar

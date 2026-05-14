@@ -3,11 +3,14 @@ import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { Layout } from '../components/layout/Layout'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
+import { Modal } from '../components/ui/Modal'
+import { ExerciseDetail } from '../components/exercises/ExerciseDetail'
 import { useAuth } from '../context/AuthContext'
 import { useActiveRoutine } from '../hooks/useActiveRoutine'
 import { useWorkoutLogs } from '../hooks/useWorkoutLogs'
+import { useExercises } from '../hooks/useExercises'
 import type { CreateLoggedSetData } from '../hooks/useWorkoutLogs'
-import type { RoutineDayWithBlocks } from '../lib/types'
+import type { BlockExerciseWithDetails, ExerciseWithRelations, LoggedSet, RoutineDayWithBlocks } from '../lib/types'
 
 interface SetInput {
   block_exercise_id: string
@@ -28,11 +31,16 @@ export function WorkoutExecution() {
 
   const { user } = useAuth()
   const { routine, loading: routineLoading } = useActiveRoutine(user?.id)
-  const { createWorkoutLog } = useWorkoutLogs(user?.id, routine?.id)
+  const { logs, createWorkoutLog } = useWorkoutLogs(user?.id, routine?.id)
+  const { exercises } = useExercises()
 
   const [day, setDay] = useState<RoutineDayWithBlocks | null>(null)
   const [setInputs, setSetInputs] = useState<SetInput[]>([])
   const [studentNote, setStudentNote] = useState('')
+  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({})
+  const [visibleExerciseNotes, setVisibleExerciseNotes] = useState<Set<string>>(new Set())
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseWithRelations | null>(null)
+  const [exerciseModalOpen, setExerciseModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -63,6 +71,8 @@ export function WorkoutExecution() {
           })
         })
         setSetInputs(inputs)
+        setExerciseNotes({})
+        setVisibleExerciseNotes(new Set())
       }
     }
   }, [routineLoading, routine, dayId, weekNumber])
@@ -82,6 +92,67 @@ export function WorkoutExecution() {
     return setInputs.find(
       input => input.block_exercise_id === blockExerciseId && input.set_number === setNumber
     )
+  }
+
+  const getPreviousLoggedSet = (blockExerciseId: string, setNumber: number): LoggedSet | undefined => {
+    const previousLogForDay = day
+      ? logs.find(log => log.routine_day_id === day.id)
+      : null
+
+    return previousLogForDay?.logged_sets.find(
+      loggedSet => loggedSet.block_exercise_id === blockExerciseId && loggedSet.set_number === setNumber
+    )
+  }
+
+  const formatPreviousLoggedSet = (loggedSet: LoggedSet | undefined) => {
+    if (!loggedSet) return null
+
+    const parts: string[] = []
+
+    if (loggedSet.actual_reps !== null) {
+      parts.push(`${loggedSet.actual_reps} reps`)
+    }
+
+    if (loggedSet.actual_seconds !== null) {
+      parts.push(`${loggedSet.actual_seconds} seg`)
+    }
+
+    if (loggedSet.actual_weight_kg !== null) {
+      parts.push(`${loggedSet.actual_weight_kg}kg`)
+    }
+
+    return parts.length > 0 ? parts.join(' / ') : null
+  }
+
+  const toggleExerciseNote = (blockExerciseId: string) => {
+    setVisibleExerciseNotes(prev => {
+      const next = new Set(prev)
+      if (next.has(blockExerciseId)) {
+        next.delete(blockExerciseId)
+      } else {
+        next.add(blockExerciseId)
+      }
+      return next
+    })
+  }
+
+  const openExerciseDetail = (blockExercise: BlockExerciseWithDetails) => {
+    const exercise = exercises.find(ex => ex.id === blockExercise.exercise_id)
+
+    if (exercise) {
+      setSelectedExercise(exercise)
+    } else {
+      setSelectedExercise({
+        ...blockExercise.exercise,
+        movement_pattern: blockExercise.exercise.movement_pattern ?? null,
+        direction: blockExercise.exercise.direction ?? null,
+        primary_muscles: [],
+        synergist_muscles: [],
+        videos: blockExercise.exercise.videos || [],
+      })
+    }
+
+    setExerciseModalOpen(true)
   }
 
   const handleComplete = async () => {
@@ -111,12 +182,20 @@ export function WorkoutExecution() {
         }
       }
 
+      const exerciseNotesToSave = Object.entries(exerciseNotes)
+        .map(([blockExerciseId, note]) => ({
+          block_exercise_id: blockExerciseId,
+          note: note.trim(),
+        }))
+        .filter(note => note.note.length > 0)
+
       const { error: createError } = await createWorkoutLog({
         routine_id: routine.id,
         routine_day_id: day.id,
         week_number: weekNumber,
         student_note: studentNote || undefined,
         logged_sets: loggedSets,
+        exercise_notes: exerciseNotesToSave,
       }, user.id)
 
       if (createError) {
@@ -216,14 +295,29 @@ export function WorkoutExecution() {
                             {block.block_letter}{exercise.position}
                           </span>
                           <div className="flex flex-wrap items-center gap-2">
-                            <a
-                              href={`/exercises/${exercise.exercise_id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-semibold text-gray-900 hover:text-blue-700 hover:underline"
+                            <button
+                              type="button"
+                              onClick={() => openExerciseDetail(exercise)}
+                              className="text-left font-semibold text-gray-900 hover:text-blue-700 hover:underline"
                             >
                               {exercise.exercise?.name}
-                            </a>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleExerciseNote(exercise.id)}
+                              className={`relative inline-flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors ${
+                                exerciseNotes[exercise.id]?.trim()
+                                  ? 'bg-blue-50 text-blue-700'
+                                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'
+                              }`}
+                              aria-label="Agregar nota del ejercicio"
+                              title="Nota del ejercicio"
+                            >
+                              💬
+                              {exerciseNotes[exercise.id]?.trim() && (
+                                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-600" />
+                              )}
+                            </button>
                             {videos.map((video, index) => (
                               <a
                                 key={video.id}
@@ -242,6 +336,18 @@ export function WorkoutExecution() {
                               <span>📝</span> {exercise.note}
                             </p>
                           )}
+                          {visibleExerciseNotes.has(exercise.id) && (
+                            <textarea
+                              value={exerciseNotes[exercise.id] || ''}
+                              onChange={(e) => setExerciseNotes(prev => ({
+                                ...prev,
+                                [exercise.id]: e.target.value,
+                              }))}
+                              placeholder="Nota sobre este ejercicio"
+                              className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none"
+                              rows={2}
+                            />
+                          )}
                         </div>
                       </div>
 
@@ -250,49 +356,61 @@ export function WorkoutExecution() {
                         {weekSets.map((set, idx) => {
                           const input = getSetInput(exercise.id, set.set_number)
                           const isTimeSet = set.set_type === 'time'
+                          const previousLoggedSet = getPreviousLoggedSet(exercise.id, set.set_number)
+                          const previousLoggedSetText = formatPreviousLoggedSet(previousLoggedSet)
 
                           return (
-                            <div key={set.id} className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400 w-8">{idx + 1}.</span>
+                            <div key={set.id} className="flex items-start gap-2">
+                              <span className="text-sm text-gray-400 w-8 pt-2">{idx + 1}.</span>
 
                               {/* Prescrito */}
-                              <span className="text-sm text-gray-500 w-24">
+                              <span className="text-sm text-gray-500 w-24 pt-2">
                                 {isTimeSet ? `${set.quantity}"` : `${set.quantity} reps`}
                                 {set.weight_kg && ` / ${set.weight_kg}kg`}
                               </span>
 
-                              {/* Input de reps/tiempo */}
-                              <Input
-                                type="number"
-                                value={isTimeSet ? input?.actual_seconds || '' : input?.actual_reps || ''}
-                                onChange={(e) => updateSetInput(
-                                  exercise.id,
-                                  set.set_number,
-                                  isTimeSet ? 'actual_seconds' : 'actual_reps',
-                                  e.target.value
+                              <div className="space-y-1">
+                                {previousLoggedSetText && (
+                                  <p className="text-xs text-gray-400">
+                                    anterior: {previousLoggedSetText}
+                                  </p>
                                 )}
-                                placeholder={isTimeSet ? 'seg' : 'reps'}
-                                className="w-20"
-                                min={0}
-                              />
 
-                              {/* Input de peso (solo si hay peso prescrito) */}
-                              {set.weight_kg !== null && (
-                                <Input
-                                  type="number"
-                                  step="0.5"
-                                  value={input?.actual_weight || ''}
-                                  onChange={(e) => updateSetInput(
-                                    exercise.id,
-                                    set.set_number,
-                                    'actual_weight',
-                                    e.target.value
+                                <div className="flex items-center gap-2">
+                                  {/* Input de reps/tiempo */}
+                                  <Input
+                                    type="number"
+                                    value={isTimeSet ? input?.actual_seconds || '' : input?.actual_reps || ''}
+                                    onChange={(e) => updateSetInput(
+                                      exercise.id,
+                                      set.set_number,
+                                      isTimeSet ? 'actual_seconds' : 'actual_reps',
+                                      e.target.value
+                                    )}
+                                    placeholder={isTimeSet ? 'seg' : 'reps'}
+                                    className="w-20"
+                                    min={0}
+                                  />
+
+                                  {/* Input de peso (solo si hay peso prescrito) */}
+                                  {set.weight_kg !== null && (
+                                    <Input
+                                      type="number"
+                                      step="0.5"
+                                      value={input?.actual_weight || ''}
+                                      onChange={(e) => updateSetInput(
+                                        exercise.id,
+                                        set.set_number,
+                                        'actual_weight',
+                                        e.target.value
+                                      )}
+                                      placeholder="kg"
+                                      className="w-20"
+                                      min={0}
+                                    />
                                   )}
-                                  placeholder="kg"
-                                  className="w-20"
-                                  min={0}
-                                />
-                              )}
+                                </div>
+                              </div>
                             </div>
                           )
                         })}
@@ -331,6 +449,22 @@ export function WorkoutExecution() {
         </div>
       </div>
 
+      <Modal
+        isOpen={exerciseModalOpen}
+        onClose={() => setExerciseModalOpen(false)}
+        title={selectedExercise?.name || ''}
+        size="lg"
+      >
+        {selectedExercise && (
+          <ExerciseDetail
+            exercise={selectedExercise}
+            onEdit={() => undefined}
+            onDelete={() => undefined}
+            onClose={() => setExerciseModalOpen(false)}
+            showAdminActions={false}
+          />
+        )}
+      </Modal>
     </Layout>
   )
 }

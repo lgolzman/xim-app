@@ -8,6 +8,7 @@ export interface CreateWorkoutLogData {
   week_number: number
   student_note?: string
   logged_sets: CreateLoggedSetData[]
+  exercise_notes?: CreateWorkoutExerciseNoteData[]
 }
 
 export interface CreateLoggedSetData {
@@ -16,6 +17,11 @@ export interface CreateLoggedSetData {
   actual_reps?: number
   actual_weight_kg?: number
   actual_seconds?: number
+}
+
+export interface CreateWorkoutExerciseNoteData {
+  block_exercise_id: string
+  note: string
 }
 
 export function useWorkoutLogs(studentId?: string, routineId?: string) {
@@ -42,7 +48,8 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
         .select(`
           *,
           routine_day:routine_days(*),
-          logged_sets(*)
+          logged_sets(*),
+          workout_exercise_notes(*)
         `)
         .eq('student_id', studentId)
         .order('completed_at', { ascending: false })
@@ -103,7 +110,8 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
         .select(`
           *,
           routine_day:routine_days(*),
-          logged_sets(*)
+          logged_sets(*),
+          workout_exercise_notes(*)
         `)
         .eq('id', logId)
         .single()
@@ -157,6 +165,23 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
           .insert(setsToInsert)
 
         if (setsError) throw setsError
+      }
+
+      // 3. Crear notas por ejercicio
+      const notesToInsert = (data.exercise_notes || [])
+        .map(note => ({
+          workout_log_id: log.id,
+          block_exercise_id: note.block_exercise_id,
+          note: note.note.trim(),
+        }))
+        .filter(note => note.note.length > 0)
+
+      if (notesToInsert.length > 0) {
+        const { error: notesError } = await supabase
+          .from('workout_exercise_notes')
+          .insert(notesToInsert)
+
+        if (notesError) throw notesError
       }
 
       void fetchLogs()

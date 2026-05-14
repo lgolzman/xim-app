@@ -93,10 +93,18 @@ function formatWeekSets(sets: PrescribedSet[]) {
   )
 
   if (allEqual) {
-    return `${sortedSets.length}x${formatQuantity(firstSet)}${formatWeight(firstSet.weight_kg)}`
+    return `${sortedSets.length}×${formatQuantity(firstSet)}${formatWeight(firstSet.weight_kg)}`
   }
 
-  return sortedSets.map(set => `${formatQuantity(set)}${formatWeight(set.weight_kg)}`).join(' · ')
+  return (
+    <div className="space-y-1">
+      {sortedSets.map(set => (
+        <div key={set.id}>
+          {formatQuantity(set)}{formatWeight(set.weight_kg)}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function formatQuantity(set: PrescribedSet) {
