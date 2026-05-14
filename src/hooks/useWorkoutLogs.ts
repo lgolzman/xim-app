@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { createFetchAbortSignal } from './supabaseFetch'
 import type { WorkoutLog, WorkoutLogWithDetails, LoggedSet } from '../lib/types'
 
 export interface CreateWorkoutLogData {
@@ -25,7 +24,7 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
   const [error, setError] = useState<string | null>(null)
   const isMountedRef = useRef(false)
 
-  const fetchLogs = useCallback(async (signal?: AbortSignal) => {
+  const fetchLogs = useCallback(async () => {
     if (!isMountedRef.current) return
 
     if (!studentId) {
@@ -36,7 +35,6 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
 
     setLoading(true)
     setError(null)
-    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
       let query = supabase
@@ -53,7 +51,7 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
         query = query.eq('routine_id', routineId)
       }
 
-      const { data, error } = await query.abortSignal(requestSignal)
+      const { data, error } = await query
 
       if (error) throw error
 
@@ -76,17 +74,14 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
       if (isMountedRef.current) {
         setLoading(false)
       }
-      cleanup()
     }
   }, [studentId, routineId])
 
   useEffect(() => {
     isMountedRef.current = true
-    const controller = new AbortController()
-    fetchLogs(controller.signal)
+    fetchLogs()
     return () => {
       isMountedRef.current = false
-      controller.abort()
     }
   }, [fetchLogs])
 

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { createFetchAbortSignal } from './supabaseFetch'
 import type { Invitation, UserRole } from '../lib/types'
 
 export function useInvitations() {
@@ -9,11 +8,10 @@ export function useInvitations() {
   const [error, setError] = useState<string | null>(null)
   const isMountedRef = useRef(false)
 
-  const fetchInvitations = useCallback(async (signal?: AbortSignal) => {
+  const fetchInvitations = useCallback(async () => {
     if (!isMountedRef.current) return
     setLoading(true)
     setError(null)
-    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
       const query = supabase
@@ -21,7 +19,7 @@ export function useInvitations() {
         .select('*')
         .order('created_at', { ascending: false })
 
-      const { data, error } = await query.abortSignal(requestSignal)
+      const { data, error } = await query
 
       if (error) throw error
       if (!isMountedRef.current) return
@@ -35,17 +33,14 @@ export function useInvitations() {
       if (isMountedRef.current) {
         setLoading(false)
       }
-      cleanup()
     }
   }, [])
 
   useEffect(() => {
     isMountedRef.current = true
-    const controller = new AbortController()
-    fetchInvitations(controller.signal)
+    fetchInvitations()
     return () => {
       isMountedRef.current = false
-      controller.abort()
     }
   }, [fetchInvitations])
 

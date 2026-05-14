@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { createFetchAbortSignal } from './supabaseFetch'
 import type { Muscle } from '../lib/types'
 
 export function useMuscles() {
@@ -9,11 +8,10 @@ export function useMuscles() {
   const [error, setError] = useState<string | null>(null)
   const isMountedRef = useRef(false)
 
-  const fetchMuscles = useCallback(async (signal?: AbortSignal) => {
+  const fetchMuscles = useCallback(async () => {
     if (!isMountedRef.current) return
     setLoading(true)
     setError(null)
-    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
       const query = supabase
@@ -21,7 +19,7 @@ export function useMuscles() {
         .select('*')
         .order('name')
 
-      const { data, error } = await query.abortSignal(requestSignal)
+      const { data, error } = await query
 
       if (error) throw error
       if (!isMountedRef.current) return
@@ -35,17 +33,14 @@ export function useMuscles() {
       if (isMountedRef.current) {
         setLoading(false)
       }
-      cleanup()
     }
   }, [])
 
   useEffect(() => {
     isMountedRef.current = true
-    const controller = new AbortController()
-    fetchMuscles(controller.signal)
+    fetchMuscles()
     return () => {
       isMountedRef.current = false
-      controller.abort()
     }
   }, [fetchMuscles])
 

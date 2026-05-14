@@ -87,47 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        try {
-          if (!isMounted) return
+      (_event, session) => {
+        if (!isMounted) return
 
-          setSession(session)
-          setUser(session?.user ?? null)
-
-          if (session?.user) {
-            const profile = await fetchProfile(session.user.id)
-            if (!isMounted) return
-
-            // Verificar si la cuenta está inhabilitada
-            if (profile && profile.active === false) {
-              console.warn('Account is disabled, signing out')
-              disabledSignOutRef.current = true
-              setIsDisabled(true)
-              await supabase.auth.signOut()
-              setSession(null)
-              setUser(null)
-              setProfile(null)
-              return
-            }
-
-            setIsDisabled(false)
-            setProfile(profile)
-          } else {
-            if (disabledSignOutRef.current) {
-              disabledSignOutRef.current = false
-              setIsDisabled(true)
-            } else {
-              setIsDisabled(false)
-            }
-            setProfile(null)
-          }
-        } catch (error) {
-          console.error('Error in auth state change:', error)
-        } finally {
-          if (isMounted) {
-            setLoading(false)
-          }
-        }
+        setSession(session)
+        setUser(session?.user ?? null)
+        setLoading(false)
       }
     )
 
@@ -142,29 +107,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setSession(session)
         setUser(session?.user ?? null)
-
-        if (session?.user) {
-          const profile = await fetchProfile(session.user.id)
-          if (!isMounted) return
-
-          // Verificar si la cuenta está inhabilitada
-          if (profile && profile.active === false) {
-            console.warn('Account is disabled, signing out')
-            disabledSignOutRef.current = true
-            setIsDisabled(true)
-            await supabase.auth.signOut()
-            setSession(null)
-            setUser(null)
-            setProfile(null)
-            return
-          }
-
-          setIsDisabled(false)
-          setProfile(profile)
-        } else {
-          setIsDisabled(false)
-          setProfile(null)
-        }
       } catch (error) {
         console.error('Error refreshing auth on visibility change:', error)
       } finally {
@@ -180,6 +122,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe()
     }
   }, [])
+
+  // IMPORTANTE: fetchProfile no debe llamarse dentro del callback de
+  // onAuthStateChange. Ese callback corre bajo un lock interno de Supabase;
+  // si desde ahí se hace otra query al cliente de Supabase, éste intenta
+  // leer la sesión/token y necesita el mismo lock, causando un deadlock
+  // que se manifiesta como AbortError y spinner infinito.
+  // Por eso fetchProfile corre en un useEffect separado que reacciona
+  // al cambio de user?.id, fuera del lock de Supabase.
+  useEffect(() => {
+    let isMounted = true
+
+    const loadProfile = async () => {
+      if (!user?.id) {
+        if (disabledSignOutRef.current) {
+          disabledSignOutRef.current = false
+          setIsDisabled(true)
+        } else {
+          setIsDisabled(false)
+        }
+        setProfile(null)
+        return
+      }
+
+      const profile = await fetchProfile(user.id)
+      if (!isMounted || !profile) return
+
+      // Verificar si la cuenta está inhabilitada
+      if (profile.active === false) {
+        console.warn('Account is disabled, signing out')
+        disabledSignOutRef.current = true
+        setIsDisabled(true)
+        await supabase.auth.signOut()
+        if (!isMounted) return
+
+        setSession(null)
+        setUser(null)
+        setProfile(null)
+        return
+      }
+
+      setIsDisabled(false)
+      setProfile(profile)
+    }
+
+    loadProfile()
+
+    return () => {
+      isMounted = false
+    }
+  }, [user?.id])
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({

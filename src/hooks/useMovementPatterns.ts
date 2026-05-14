@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { createFetchAbortSignal } from './supabaseFetch'
 import type { MovementPattern } from '../lib/types'
 
 export function useMovementPatterns() {
@@ -9,11 +8,10 @@ export function useMovementPatterns() {
   const [error, setError] = useState<string | null>(null)
   const isMountedRef = useRef(false)
 
-  const fetchPatterns = useCallback(async (signal?: AbortSignal) => {
+  const fetchPatterns = useCallback(async () => {
     if (!isMountedRef.current) return
     setLoading(true)
     setError(null)
-    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
       const query = supabase
@@ -21,7 +19,7 @@ export function useMovementPatterns() {
         .select('*')
         .order('name')
 
-      const { data, error } = await query.abortSignal(requestSignal)
+      const { data, error } = await query
 
       if (error) throw error
       if (!isMountedRef.current) return
@@ -35,17 +33,14 @@ export function useMovementPatterns() {
       if (isMountedRef.current) {
         setLoading(false)
       }
-      cleanup()
     }
   }, [])
 
   useEffect(() => {
     isMountedRef.current = true
-    const controller = new AbortController()
-    fetchPatterns(controller.signal)
+    fetchPatterns()
     return () => {
       isMountedRef.current = false
-      controller.abort()
     }
   }, [fetchPatterns])
 

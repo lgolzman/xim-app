@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { createFetchAbortSignal } from './supabaseFetch'
 import type { ExerciseWithRelations, ExerciseFormData, Exercise } from '../lib/types'
 
 export function useExercises() {
@@ -9,11 +8,10 @@ export function useExercises() {
   const [error, setError] = useState<string | null>(null)
   const isMountedRef = useRef(false)
 
-  const fetchExercises = useCallback(async (signal?: AbortSignal) => {
+  const fetchExercises = useCallback(async () => {
     if (!isMountedRef.current) return
     setLoading(true)
     setError(null)
-    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
       const exercisesQuery = supabase
@@ -25,7 +23,7 @@ export function useExercises() {
         `)
         .order('name')
 
-      const { data: exercisesData, error: exercisesError } = await exercisesQuery.abortSignal(requestSignal)
+      const { data: exercisesData, error: exercisesError } = await exercisesQuery
 
       if (exercisesError) throw exercisesError
 
@@ -45,9 +43,9 @@ export function useExercises() {
             .eq('exercise_id', exercise.id)
 
           const [primaryMuscles, synergistMuscles, videos] = await Promise.all([
-            primaryMusclesQuery.abortSignal(requestSignal),
-            synergistMusclesQuery.abortSignal(requestSignal),
-            videosQuery.abortSignal(requestSignal),
+            primaryMusclesQuery,
+            synergistMusclesQuery,
+            videosQuery,
           ])
 
           return {
@@ -70,17 +68,14 @@ export function useExercises() {
       if (isMountedRef.current) {
         setLoading(false)
       }
-      cleanup()
     }
   }, [])
 
   useEffect(() => {
     isMountedRef.current = true
-    const controller = new AbortController()
-    fetchExercises(controller.signal)
+    fetchExercises()
     return () => {
       isMountedRef.current = false
-      controller.abort()
     }
   }, [fetchExercises])
 
