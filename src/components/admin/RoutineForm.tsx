@@ -56,6 +56,7 @@ interface RoutineFormProps {
   onSubmit: (data: FormData, action: 'draft' | 'active') => Promise<void>
   onCancel: () => void
   isEditing?: boolean
+  routineStatus?: 'draft' | 'active' | 'archived'
   loading?: boolean
 }
 
@@ -92,6 +93,7 @@ export function RoutineForm({
   onSubmit,
   onCancel,
   isEditing = false,
+  routineStatus,
   loading = false,
 }: RoutineFormProps) {
   const { students, loading: studentsLoading } = useStudents()
@@ -580,6 +582,9 @@ export function RoutineForm({
     await onSubmit(formData, action)
   }
 
+  const isActiveRoutine = routineStatus === 'active'
+  const isArchivedRoutine = routineStatus === 'archived'
+
   return (
     <div className="space-y-6">
       {/* Datos básicos */}
@@ -892,19 +897,30 @@ export function RoutineForm({
         <Button variant="secondary" onClick={onCancel} disabled={loading}>
           Cancelar
         </Button>
-        <Button
-          variant="secondary"
-          onClick={() => handleSubmit('draft')}
-          disabled={loading || !isValid()}
-        >
-          {loading ? 'Guardando...' : 'Guardar como borrador'}
-        </Button>
-        <Button
-          onClick={() => handleSubmit('active')}
-          disabled={loading || !isValid()}
-        >
-          {loading ? 'Guardando...' : 'Guardar y activar'}
-        </Button>
+        {isActiveRoutine ? (
+          <Button
+            onClick={() => handleSubmit('active')}
+            disabled={loading || !isValid()}
+          >
+            {loading ? 'Guardando...' : 'Guardar cambios'}
+          </Button>
+        ) : !isArchivedRoutine && (
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => handleSubmit('draft')}
+              disabled={loading || !isValid()}
+            >
+              {loading ? 'Guardando...' : 'Guardar como borrador'}
+            </Button>
+            <Button
+              onClick={() => handleSubmit('active')}
+              disabled={loading || !isValid()}
+            >
+              {loading ? 'Guardando...' : 'Guardar y activar'}
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Modal de selección de ejercicio */}

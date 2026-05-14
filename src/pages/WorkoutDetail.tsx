@@ -10,7 +10,9 @@ import type { WorkoutLogWithDetails, RoutineDayWithBlocks, LoggedSet, Prescribed
 export function WorkoutDetail() {
   const { logId } = useParams<{ logId: string }>()
   const { user } = useAuth()
-  const { routine, loading: routineLoading, getDayById } = useActiveRoutine(user?.id)
+  const { routine, loading: routineLoading, getDayById } = useActiveRoutine(user?.id, {
+    includeInactiveBlockExercises: true,
+  })
   const { getLogById } = useWorkoutLogs(user?.id, routine?.id)
 
   const [log, setLog] = useState<WorkoutLogWithDetails | null>(null)
