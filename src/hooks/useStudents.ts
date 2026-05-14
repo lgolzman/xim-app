@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { createFetchAbortSignal } from './supabaseFetch'
 import type { Student } from '../lib/types'
 
 export function useStudents() {
@@ -9,11 +8,10 @@ export function useStudents() {
   const [error, setError] = useState<string | null>(null)
   const isMountedRef = useRef(false)
 
-  const fetchStudents = useCallback(async (signal?: AbortSignal) => {
+  const fetchStudents = useCallback(async () => {
     if (!isMountedRef.current) return
     setLoading(true)
     setError(null)
-    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
       const query = supabase
@@ -22,7 +20,7 @@ export function useStudents() {
         .eq('role', 'consulta')
         .order('email')
 
-      const { data, error } = await query.abortSignal(requestSignal)
+      const { data, error } = await query
 
       if (error) throw error
       if (!isMountedRef.current) return
@@ -36,17 +34,14 @@ export function useStudents() {
       if (isMountedRef.current) {
         setLoading(false)
       }
-      cleanup()
     }
   }, [])
 
   useEffect(() => {
     isMountedRef.current = true
-    const controller = new AbortController()
-    fetchStudents(controller.signal)
+    fetchStudents()
     return () => {
       isMountedRef.current = false
-      controller.abort()
     }
   }, [fetchStudents])
 

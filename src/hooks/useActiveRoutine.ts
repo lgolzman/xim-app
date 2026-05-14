@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { createFetchAbortSignal } from './supabaseFetch'
 import type {
   RoutineWithDays,
   RoutineDay,
@@ -15,7 +14,7 @@ export function useActiveRoutine(studentId: string | undefined) {
   const [error, setError] = useState<string | null>(null)
   const isMountedRef = useRef(false)
 
-  const fetchActiveRoutine = useCallback(async (signal?: AbortSignal) => {
+  const fetchActiveRoutine = useCallback(async () => {
     if (!isMountedRef.current) return
 
     if (!studentId) {
@@ -26,7 +25,6 @@ export function useActiveRoutine(studentId: string | undefined) {
 
     setLoading(true)
     setError(null)
-    const { signal: requestSignal, cleanup } = createFetchAbortSignal(signal)
 
     try {
       const query = supabase
@@ -53,7 +51,7 @@ export function useActiveRoutine(studentId: string | undefined) {
         .eq('student_id', studentId)
         .eq('status', 'active')
 
-      const { data, error } = await query.abortSignal(requestSignal).single()
+      const { data, error } = await query.single()
 
       if (error) {
         // Si no hay rutina activa, no es un error
@@ -104,17 +102,14 @@ export function useActiveRoutine(studentId: string | undefined) {
       if (isMountedRef.current) {
         setLoading(false)
       }
-      cleanup()
     }
   }, [studentId])
 
   useEffect(() => {
     isMountedRef.current = true
-    const controller = new AbortController()
-    fetchActiveRoutine(controller.signal)
+    fetchActiveRoutine()
     return () => {
       isMountedRef.current = false
-      controller.abort()
     }
   }, [fetchActiveRoutine])
 
