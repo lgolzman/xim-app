@@ -121,7 +121,11 @@ export function RoutineForm({
   const [currentDayIndex, setCurrentDayIndex] = useState<number | null>(null)
   const [currentBlockIndex, setCurrentBlockIndex] = useState<number | null>(null)
   const [exerciseSearch, setExerciseSearch] = useState('')
-  const [expandedWeek, setExpandedWeek] = useState(1)
+  const [selectedWeekByExerciseId, setSelectedWeekByExerciseId] = useState<Record<string, number>>({})
+  const [collapsedDayIds, setCollapsedDayIds] = useState<Set<string>>(() => {
+    const initialDays = initialData?.days || []
+    return new Set(initialDays.slice(0, -1).map(day => day.id))
+  })
 
   // Filtrar ejercicios para el modal de selección
   const filteredExercises = exercises.filter(e =>
@@ -131,6 +135,33 @@ export function RoutineForm({
   // Handlers básicos
   const updateFormData = (updates: Partial<FormData>) => {
     setFormData(prev => ({ ...prev, ...updates }))
+  }
+
+  const toggleDayCollapsed = (dayId: string) => {
+    setCollapsedDayIds(prev => {
+      const next = new Set(prev)
+      if (next.has(dayId)) {
+        next.delete(dayId)
+      } else {
+        next.add(dayId)
+      }
+      return next
+    })
+  }
+
+  const getDaySummary = (day: FormDay) => {
+    const blockCount = day.blocks.length
+    const exerciseCount = day.blocks.reduce((total, block) => total + block.exercises.length, 0)
+    return `${blockCount} ${blockCount === 1 ? 'bloque' : 'bloques'} · ${exerciseCount} ${exerciseCount === 1 ? 'ejercicio' : 'ejercicios'}`
+  }
+
+  const getSelectedWeek = (exercise: FormExercise) => {
+    const selectedWeek = selectedWeekByExerciseId[exercise.id] || 1
+    return Math.min(selectedWeek, exercise.weeks.length || 1)
+  }
+
+  const setSelectedWeek = (exerciseId: string, week: number) => {
+    setSelectedWeekByExerciseId(prev => ({ ...prev, [exerciseId]: week }))
   }
 
   // Cambiar total de semanas - ajusta los sets de todos los ejercicios
@@ -166,10 +197,12 @@ export function RoutineForm({
   // Agregar día
   const addDay = () => {
     const newDayNumber = formData.days.length + 1
+    const newDayId = generateId()
+    setCollapsedDayIds(new Set(formData.days.map(day => day.id)))
     setFormData(prev => ({
       ...prev,
       days: [...prev.days, {
-        id: generateId(),
+        id: newDayId,
         day_number: newDayNumber,
         name: '',
         blocks: [{
@@ -185,6 +218,12 @@ export function RoutineForm({
   // Eliminar día
   const removeDay = (dayIndex: number) => {
     if (formData.days.length <= 1) return
+    const dayId = formData.days[dayIndex].id
+    setCollapsedDayIds(prev => {
+      const next = new Set(prev)
+      next.delete(dayId)
+      return next
+    })
     setFormData(prev => ({
       ...prev,
       days: prev.days
@@ -581,66 +620,91 @@ export function RoutineForm({
         </div>
       </div>
 
-      {/* Tabs de semanas */}
+      {/* Días */}
       <div className="bg-white border border-gray-200 rounded-lg">
-        <div className="border-b border-gray-200 px-4">
-          <nav className="flex gap-1 -mb-px overflow-x-auto">
-            {Array.from({ length: formData.total_weeks }, (_, i) => i + 1).map(week => (
-              <button
-                key={week}
-                onClick={() => setExpandedWeek(week)}
-                className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap ${
-                  expandedWeek === week
-                    ? 'border-gray-900 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Semana {week}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        {/* Días */}
         <div className="p-4 space-y-4">
-          {formData.days.map((day, dayIndex) => (
-            <div key={day.id} className="border border-gray-200 rounded-lg">
-              <div className="bg-gray-50 px-4 py-3 flex items-center justify-between rounded-t-lg">
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-gray-900">Día {day.day_number}</span>
-                  <Input
-                    value={day.name}
-                    onChange={(e) => {
-                      setFormData(prev => ({
-                        ...prev,
-                        days: prev.days.map((d, i) =>
-                          i === dayIndex ? { ...d, name: e.target.value } : d
-                        ),
-                      }))
-                    }}
-                    placeholder="Nombre opcional"
-                    className="w-40 text-sm"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => addBlock(dayIndex)}>
-                    + Bloque
-                  </Button>
-                  {formData.days.length > 1 && (
+          {formData.days.map((day, dayIndex) => {
+            const isCollapsed = collapsedDayIds.has(day.id)
+
+            return (
+              <div key={day.id} className="border border-gray-200 rounded-lg">
+                <div
+                  className={`bg-gray-50 px-4 py-3 flex items-center justify-between gap-3 cursor-pointer ${
+                    isCollapsed ? 'rounded-lg' : 'rounded-t-lg'
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={!isCollapsed}
+                  onClick={() => toggleDayCollapsed(day.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      toggleDayCollapsed(day.id)
+                    }
+                  }}
+                >
+                  <div className="flex flex-1 items-center gap-3 min-w-0">
+                    <span className="text-sm text-gray-500 w-4" aria-hidden="true">
+                      {isCollapsed ? '▶' : '▼'}
+                    </span>
+                    <span className="font-semibold text-gray-900 whitespace-nowrap">
+                      Día {day.day_number}
+                    </span>
+                    {isCollapsed && (
+                      <span className="text-sm text-gray-500 truncate">
+                        — {getDaySummary(day)}
+                      </span>
+                    )}
+                    <div
+                      className="w-40 shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <Input
+                        value={day.name}
+                        onChange={(e) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            days: prev.days.map((d, i) =>
+                              i === dayIndex ? { ...d, name: e.target.value } : d
+                            ),
+                          }))
+                        }}
+                        placeholder="Nombre opcional"
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-red-600"
-                      onClick={() => removeDay(dayIndex)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        addBlock(dayIndex)
+                      }}
                     >
-                      Eliminar día
+                      + Bloque
                     </Button>
-                  )}
+                    {formData.days.length > 1 && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeDay(dayIndex)
+                        }}
+                      >
+                        Eliminar día
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
 
               {/* Bloques */}
-              <div className="p-4 space-y-4">
+              {!isCollapsed && (
+                <div className="p-4 space-y-4">
                 {day.blocks.map((block, blockIndex) => (
                   <div key={block.id} className="border border-gray-200 rounded-lg">
                     <div className="bg-gray-100 px-3 py-2 flex items-center justify-between rounded-t-lg">
@@ -673,122 +737,149 @@ export function RoutineForm({
                           Sin ejercicios. Agregá uno con el botón + Ejercicio.
                         </p>
                       ) : (
-                        block.exercises.map((exercise, exerciseIndex) => (
-                          <div
-                            key={exercise.id}
-                            className="bg-white border border-gray-200 rounded-lg p-3"
-                          >
-                            <div className="flex items-start justify-between mb-2">
-                              <div>
-                                <span className="text-xs text-gray-500 font-medium">
-                                  {block.block_letter}{exercise.position}
-                                </span>
-                                <h4 className="font-medium text-gray-900">
-                                  {exercise.exercise?.name || 'Ejercicio'}
-                                </h4>
+                        block.exercises.map((exercise, exerciseIndex) => {
+                          const selectedWeek = getSelectedWeek(exercise)
+                          const selectedWeekIndex = selectedWeek - 1
+                          const selectedWeekSets = exercise.weeks[selectedWeekIndex]?.sets || []
+
+                          return (
+                            <div
+                              key={exercise.id}
+                              className="bg-white border border-gray-200 rounded-lg p-3"
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <span className="text-xs text-gray-500 font-medium">
+                                    {block.block_letter}{exercise.position}
+                                  </span>
+                                  <h4 className="font-medium text-gray-900">
+                                    {exercise.exercise?.name || 'Ejercicio'}
+                                  </h4>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-red-600"
+                                  onClick={() => removeExercise(dayIndex, blockIndex, exerciseIndex)}
+                                >
+                                  ×
+                                </Button>
                               </div>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-red-600"
-                                onClick={() => removeExercise(dayIndex, blockIndex, exerciseIndex)}
-                              >
-                                ×
-                              </Button>
-                            </div>
 
-                            {/* Nota del ejercicio */}
-                            <Input
-                              value={exercise.note}
-                              onChange={(e) => updateExerciseNote(dayIndex, blockIndex, exerciseIndex, e.target.value)}
-                              placeholder="Nota (ej: Pausa de 2 segundos)"
-                              className="mb-3 text-sm"
-                            />
+                              {/* Nota del ejercicio */}
+                              <Input
+                                value={exercise.note}
+                                onChange={(e) => updateExerciseNote(dayIndex, blockIndex, exerciseIndex, e.target.value)}
+                                placeholder="Nota (ej: Pausa de 2 segundos)"
+                                className="mb-3 text-sm"
+                              />
 
-                            {/* Series de la semana seleccionada */}
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-medium text-gray-500">
-                                  Series - Semana {expandedWeek}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  {expandedWeek > 1 && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-xs"
-                                      onClick={() => copySetsFromPreviousWeek(dayIndex, blockIndex, exerciseIndex, expandedWeek - 1)}
+                              <div className="mb-3 overflow-x-auto">
+                                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                                  {exercise.weeks.map(week => (
+                                    <button
+                                      key={week.week_number}
+                                      type="button"
+                                      onClick={() => setSelectedWeek(exercise.id, week.week_number)}
+                                      className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap ${
+                                        selectedWeek === week.week_number
+                                          ? 'bg-white text-gray-900 shadow-sm'
+                                          : 'text-gray-500 hover:text-gray-700'
+                                      }`}
                                     >
-                                      Copiar semana anterior
-                                    </Button>
-                                  )}
-                                  {expandedWeek === 1 && formData.total_weeks > 1 && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-xs"
-                                      onClick={() => replicateWeekOneToRest(dayIndex, blockIndex, exerciseIndex)}
-                                    >
-                                      Replicar Semana 1 en el resto
-                                    </Button>
-                                  )}
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => addSet(dayIndex, blockIndex, exerciseIndex, expandedWeek - 1)}
-                                  >
-                                    + Serie
-                                  </Button>
+                                      Sem {week.week_number}
+                                    </button>
+                                  ))}
                                 </div>
                               </div>
 
-                              {exercise.weeks[expandedWeek - 1]?.sets.map((set, setIndex) => (
-                                <div key={set.id} className="flex items-center gap-2">
-                                  <span className="text-xs text-gray-400 w-6">{setIndex + 1}.</span>
-                                  <Select
-                                    value={set.set_type}
-                                    onChange={(e) => updateSet(dayIndex, blockIndex, exerciseIndex, expandedWeek - 1, setIndex, { set_type: e.target.value as SetType })}
-                                    options={[
-                                      { value: 'reps', label: 'Reps' },
-                                      { value: 'time', label: 'Seg' },
-                                    ]}
-                                    className="w-20"
-                                  />
-                                  <Input
-                                    type="number"
-                                    value={set.quantity}
-                                    onChange={(e) => updateSet(dayIndex, blockIndex, exerciseIndex, expandedWeek - 1, setIndex, { quantity: parseInt(e.target.value) || 0 })}
-                                    className="w-16"
-                                    min={1}
-                                  />
-                                  <Input
-                                    value={set.weight_kg}
-                                    onChange={(e) => updateSet(dayIndex, blockIndex, exerciseIndex, expandedWeek - 1, setIndex, { weight_kg: e.target.value })}
-                                    placeholder="kg"
-                                    className="w-20"
-                                  />
-                                  {exercise.weeks[expandedWeek - 1].sets.length > 1 && (
+                              {/* Series de la semana seleccionada */}
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-xs font-medium text-gray-500">
+                                    Series - Semana {selectedWeek}
+                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    {selectedWeek > 1 && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-xs"
+                                        onClick={() => copySetsFromPreviousWeek(dayIndex, blockIndex, exerciseIndex, selectedWeekIndex)}
+                                      >
+                                        Copiar semana anterior
+                                      </Button>
+                                    )}
+                                    {selectedWeek === 1 && formData.total_weeks > 1 && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-xs"
+                                        onClick={() => replicateWeekOneToRest(dayIndex, blockIndex, exerciseIndex)}
+                                      >
+                                        Replicar Semana 1 en el resto
+                                      </Button>
+                                    )}
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      className="text-red-600 px-1"
-                                      onClick={() => removeSet(dayIndex, blockIndex, exerciseIndex, expandedWeek - 1, setIndex)}
+                                      onClick={() => addSet(dayIndex, blockIndex, exerciseIndex, selectedWeekIndex)}
                                     >
-                                      ×
+                                      + Serie
                                     </Button>
-                                  )}
+                                  </div>
                                 </div>
-                              ))}
+
+                                {selectedWeekSets.map((set, setIndex) => (
+                                  <div key={set.id} className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-400 w-6">{setIndex + 1}.</span>
+                                    <Select
+                                      value={set.set_type}
+                                      onChange={(e) => updateSet(dayIndex, blockIndex, exerciseIndex, selectedWeekIndex, setIndex, { set_type: e.target.value as SetType })}
+                                      options={[
+                                        { value: 'reps', label: 'Reps' },
+                                        { value: 'time', label: 'Seg' },
+                                      ]}
+                                      className="w-20"
+                                    />
+                                    <Input
+                                      type="number"
+                                      value={set.quantity}
+                                      onChange={(e) => updateSet(dayIndex, blockIndex, exerciseIndex, selectedWeekIndex, setIndex, { quantity: parseInt(e.target.value) || 0 })}
+                                      className="w-16"
+                                      min={1}
+                                    />
+                                    <Input
+                                      value={set.weight_kg}
+                                      onChange={(e) => updateSet(dayIndex, blockIndex, exerciseIndex, selectedWeekIndex, setIndex, { weight_kg: e.target.value })}
+                                      placeholder="kg"
+                                      className="w-20"
+                                    />
+                                    {selectedWeekSets.length > 1 && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="text-red-600 px-1"
+                                        onClick={() => removeSet(dayIndex, blockIndex, exerciseIndex, selectedWeekIndex, setIndex)}
+                                      >
+                                        ×
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ))
+                          )
+                        })
                       )}
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+              )}
             </div>
-          ))}
+            )
+          })}
 
           <Button variant="secondary" onClick={addDay} className="w-full">
             + Agregar día
