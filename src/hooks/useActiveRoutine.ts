@@ -8,7 +8,14 @@ import type {
   PrescribedSet,
 } from '../lib/types'
 
-export function useActiveRoutine(studentId: string | undefined) {
+interface UseActiveRoutineOptions {
+  includeInactiveBlockExercises?: boolean
+}
+
+export function useActiveRoutine(
+  studentId: string | undefined,
+  options: UseActiveRoutineOptions = {}
+) {
   const [routine, setRoutine] = useState<RoutineWithDays | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -50,18 +57,20 @@ export function useActiveRoutine(studentId: string | undefined) {
         `)
         .eq('student_id', studentId)
         .eq('status', 'active')
+        .order('updated_at', { ascending: false })
+        .limit(1)
 
-      const { data, error } = await query.single()
+      const { data, error } = await query.maybeSingle()
 
       if (error) {
-        // Si no hay rutina activa, no es un error
-        if (error.code === 'PGRST116') {
-          if (!isMountedRef.current) return
-          setRoutine(null)
-          setLoading(false)
-          return
-        }
         throw error
+      }
+
+      if (!data) {
+        if (!isMountedRef.current) return
+        setRoutine(null)
+        setLoading(false)
+        return
       }
 
       // Ordenar los datos
@@ -72,6 +81,9 @@ export function useActiveRoutine(studentId: string | undefined) {
             day.routine_blocks.sort((a: RoutineBlock, b: RoutineBlock) => a.block_order - b.block_order)
             day.routine_blocks.forEach((block: any) => {
               if (block.block_exercises) {
+                if (!options.includeInactiveBlockExercises) {
+                  block.block_exercises = block.block_exercises.filter((ex: BlockExercise) => ex.active !== false)
+                }
                 block.block_exercises.sort((a: BlockExercise, b: BlockExercise) => a.position - b.position)
                 block.block_exercises.forEach((ex: any) => {
                   if (ex.prescribed_sets) {
@@ -87,8 +99,18 @@ export function useActiveRoutine(studentId: string | undefined) {
                 })
               }
             })
+            if (!options.includeInactiveBlockExercises) {
+              day.routine_blocks = day.routine_blocks.filter((block: RoutineBlock & { block_exercises?: BlockExercise[] }) =>
+                (block.block_exercises?.length || 0) > 0
+              )
+            }
           }
         })
+        if (!options.includeInactiveBlockExercises) {
+          data.routine_days = data.routine_days.filter((day: RoutineDay & { routine_blocks?: RoutineBlock[] }) =>
+            (day.routine_blocks?.length || 0) > 0
+          )
+        }
       }
 
       if (!isMountedRef.current) return
@@ -103,7 +125,7 @@ export function useActiveRoutine(studentId: string | undefined) {
         setLoading(false)
       }
     }
-  }, [studentId])
+  }, [studentId, options.includeInactiveBlockExercises])
 
   useEffect(() => {
     isMountedRef.current = true

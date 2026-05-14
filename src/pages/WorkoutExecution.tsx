@@ -39,6 +39,8 @@ export function WorkoutExecution() {
   const [studentNote, setStudentNote] = useState('')
   const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({})
   const [visibleExerciseNotes, setVisibleExerciseNotes] = useState<Set<string>>(new Set())
+  const [expandedBlockIds, setExpandedBlockIds] = useState<Set<string>>(new Set())
+  const [completedBlockIds, setCompletedBlockIds] = useState<Set<string>>(new Set())
   const [selectedExercise, setSelectedExercise] = useState<ExerciseWithRelations | null>(null)
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -73,6 +75,8 @@ export function WorkoutExecution() {
         setSetInputs(inputs)
         setExerciseNotes({})
         setVisibleExerciseNotes(new Set())
+        setExpandedBlockIds(new Set(dayData.routine_blocks[0] ? [dayData.routine_blocks[0].id] : []))
+        setCompletedBlockIds(new Set())
       }
     }
   }, [routineLoading, routine, dayId, weekNumber])
@@ -131,6 +135,35 @@ export function WorkoutExecution() {
         next.delete(blockExerciseId)
       } else {
         next.add(blockExerciseId)
+      }
+      return next
+    })
+  }
+
+  const toggleBlockExpanded = (blockId: string) => {
+    setExpandedBlockIds(prev => {
+      const next = new Set(prev)
+      if (next.has(blockId)) {
+        next.delete(blockId)
+      } else {
+        next.add(blockId)
+      }
+      return next
+    })
+  }
+
+  const completeBlock = (blockId: string) => {
+    if (!day) return
+
+    const currentIndex = day.routine_blocks.findIndex(block => block.id === blockId)
+    const nextBlock = currentIndex >= 0 ? day.routine_blocks[currentIndex + 1] : undefined
+
+    setCompletedBlockIds(prev => new Set(prev).add(blockId))
+    setExpandedBlockIds(prev => {
+      const next = new Set(prev)
+      next.delete(blockId)
+      if (nextBlock) {
+        next.add(nextBlock.id)
       }
       return next
     })
@@ -273,22 +306,70 @@ export function WorkoutExecution() {
 
         {/* Bloques y ejercicios */}
         <div className="space-y-6">
-          {day.routine_blocks.map(block => (
-            <div key={block.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-              <div className="bg-gray-100 px-4 py-2 flex items-center gap-2">
-                <span className="font-semibold text-gray-900">Bloque {block.block_letter}</span>
-                {block.block_exercises.length > 1 && (
-                  <span className="text-xs px-2 py-0.5 bg-gray-200 rounded text-gray-600">superset</span>
-                )}
-              </div>
+          {day.routine_blocks.map(block => {
+            const isExpanded = expandedBlockIds.has(block.id)
+            const isCompleted = completedBlockIds.has(block.id)
 
-              <div className="divide-y divide-gray-100">
-                {block.block_exercises.map(exercise => {
-                  const weekSets = exercise.prescribed_sets.filter(s => s.week_number === weekNumber)
-                  const videos = exercise.exercise?.videos || []
+            return (
+              <div
+                key={block.id}
+                className={`bg-white border rounded-lg overflow-hidden ${
+                  isCompleted ? 'border-green-200' : 'border-gray-200'
+                }`}
+              >
+                <div
+                  className={`px-4 py-3 flex items-center justify-between gap-3 cursor-pointer ${
+                    isCompleted ? 'bg-green-50' : 'bg-gray-100'
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
+                  onClick={() => toggleBlockExpanded(block.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      toggleBlockExpanded(block.id)
+                    }
+                  }}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm text-gray-500 w-4" aria-hidden="true">
+                      {isExpanded ? '▼' : '▶'}
+                    </span>
+                    {isCompleted && (
+                      <span className="text-green-700 font-semibold" aria-label="Bloque terminado">
+                        ✓
+                      </span>
+                    )}
+                    <span className="font-semibold text-gray-900">Bloque {block.block_letter}</span>
+                    {block.block_exercises.length > 1 && (
+                      <span className="text-xs px-2 py-0.5 bg-gray-200 rounded text-gray-600">superset</span>
+                    )}
+                  </div>
+                  {isExpanded && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        completeBlock(block.id)
+                      }}
+                    >
+                      ✓ Terminé este bloque
+                    </Button>
+                  )}
+                </div>
 
-                  return (
-                    <div key={exercise.id} className="p-4">
+                {isExpanded && (
+                  <div className="divide-y divide-gray-100">
+                    {block.block_exercises.map(exercise => {
+                      const weekSets = exercise.prescribed_sets.filter(s => s.week_number === weekNumber)
+                      const videos = exercise.exercise?.videos || []
+
+                      return (
+                        <div key={exercise.id} className="p-4">
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <span className="text-xs text-gray-500 font-medium">
@@ -415,12 +496,14 @@ export function WorkoutExecution() {
                           )
                         })}
                       </div>
-                    </div>
-                  )
-                })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* Notas del entrenamiento */}

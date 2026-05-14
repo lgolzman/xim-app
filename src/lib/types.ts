@@ -124,6 +124,7 @@ export interface BlockExercise {
   exercise_id: string
   position: number
   note: string | null
+  active: boolean
 }
 
 export interface PrescribedSet {

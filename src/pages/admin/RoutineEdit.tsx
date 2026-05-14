@@ -7,14 +7,13 @@ import { Button } from '../../components/ui/Button'
 import { useRoutines } from '../../hooks/useRoutines'
 import { useAuth } from '../../context/AuthContext'
 import { useExercises } from '../../hooks/useExercises'
-import { supabase } from '../../lib/supabase'
 import type { RoutineWithDays } from '../../lib/types'
 
 export function RoutineEdit() {
   const navigate = useNavigate()
   const { routineId } = useParams<{ routineId: string }>()
   const { user } = useAuth()
-  const { getRoutineWithDetails, updateRoutineStatus } = useRoutines()
+  const { getRoutineWithDetails, updateRoutine, updateRoutineStatus } = useRoutines()
   const { exercises } = useExercises()
 
   const [routine, setRoutine] = useState<RoutineWithDays | null>(null)
@@ -118,88 +117,41 @@ export function RoutineEdit() {
     setError(null)
 
     try {
-      // Para edición, eliminamos los días existentes y recreamos todo
-      // Primero eliminamos días (cascade eliminará bloques, ejercicios, sets)
-      const { error: deleteError } = await supabase
-        .from('routine_days')
-        .delete()
-        .eq('routine_id', routineId)
+      const { error: updateError } = await updateRoutine(routineId, {
+        name: formData.name,
+        total_weeks: formData.total_weeks,
+        days: formData.days.map(day => ({
+          id: day.id,
+          day_number: day.day_number,
+          name: day.name || undefined,
+          blocks: day.blocks.map(block => ({
+            id: block.id,
+            block_letter: block.block_letter,
+            block_order: block.block_order,
+            exercises: block.exercises.map(exercise => ({
+              id: exercise.id,
+              exercise_id: exercise.exercise_id,
+              position: exercise.position,
+              note: exercise.note || undefined,
+              sets: exercise.weeks.flatMap(week =>
+                week.sets.map((set, setIndex) => ({
+                  id: set.id,
+                  week_number: week.week_number,
+                  set_number: setIndex + 1,
+                  set_type: set.set_type,
+                  quantity: set.quantity,
+                  weight_kg: set.weight_kg ? parseFloat(set.weight_kg) : undefined,
+                }))
+              ),
+            })),
+          })),
+        })),
+      })
 
-      if (deleteError) throw deleteError
-
-      // Actualizar datos básicos de la rutina
-      const { error: updateError } = await supabase
-        .from('routines')
-        .update({
-          name: formData.name,
-          total_weeks: formData.total_weeks,
-        })
-        .eq('id', routineId)
-
-      if (updateError) throw updateError
-
-      // Recrear estructura de días, bloques, ejercicios, sets
-      for (const day of formData.days) {
-        const { data: routineDay, error: dayError } = await supabase
-          .from('routine_days')
-          .insert({
-            routine_id: routineId,
-            day_number: day.day_number,
-            name: day.name || null,
-          })
-          .select()
-          .single()
-
-        if (dayError) throw dayError
-
-        for (const block of day.blocks) {
-          const { data: routineBlock, error: blockError } = await supabase
-            .from('routine_blocks')
-            .insert({
-              routine_day_id: routineDay.id,
-              block_letter: block.block_letter,
-              block_order: block.block_order,
-            })
-            .select()
-            .single()
-
-          if (blockError) throw blockError
-
-          for (const exercise of block.exercises) {
-            const { data: blockExercise, error: exerciseError } = await supabase
-              .from('block_exercises')
-              .insert({
-                block_id: routineBlock.id,
-                exercise_id: exercise.exercise_id,
-                position: exercise.position,
-                note: exercise.note || null,
-              })
-              .select()
-              .single()
-
-            if (exerciseError) throw exerciseError
-
-            // Crear sets prescritos
-            const setsToInsert = exercise.weeks.flatMap((week) =>
-              week.sets.map((set, setIndex) => ({
-                block_exercise_id: blockExercise.id,
-                week_number: week.week_number,
-                set_number: setIndex + 1,
-                set_type: set.set_type,
-                quantity: set.quantity,
-                weight_kg: set.weight_kg ? parseFloat(set.weight_kg) : null,
-              }))
-            )
-
-            if (setsToInsert.length > 0) {
-              const { error: setsError } = await supabase
-                .from('prescribed_sets')
-                .insert(setsToInsert)
-
-              if (setsError) throw setsError
-            }
-          }
-        }
+      if (updateError) {
+        setError(updateError)
+        setSaving(false)
+        return
       }
 
       // Si la acción es activar, cambiar estado
@@ -331,6 +283,7 @@ export function RoutineEdit() {
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             isEditing={true}
+            routineStatus={routine.status}
             loading={saving}
           />
         )}
