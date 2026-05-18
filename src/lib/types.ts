@@ -168,6 +168,7 @@ export interface WorkoutExerciseNote {
 // Tipos con relaciones para queries complejas
 export interface RoutineWithStudent extends Routine {
   student: Student
+  routine_days?: Pick<RoutineDay, 'id'>[]
 }
 
 export interface ExerciseInRoutine extends Exercise {

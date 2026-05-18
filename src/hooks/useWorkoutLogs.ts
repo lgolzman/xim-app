@@ -63,7 +63,7 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
       if (error) throw error
 
       // Ordenar logged_sets por set_number
-      const logsWithSortedSets = (data || []).map((log: any) => ({
+      const logsWithSortedSets = ((data || []) as WorkoutLogWithDetails[]).map(log => ({
         ...log,
         logged_sets: log.logged_sets?.sort((a: LoggedSet, b: LoggedSet) =>
           a.block_exercise_id.localeCompare(b.block_exercise_id) || a.set_number - b.set_number
@@ -183,6 +183,15 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
 
         if (notesError) throw notesError
       }
+
+      supabase.functions
+        .invoke('notify-workout-completed', {
+          body: { workoutLogId: log.id },
+        })
+        .then(({ error }) => {
+          if (error) console.error('Error sending workout notification:', error)
+        })
+        .catch(err => console.error('Error sending workout notification:', err))
 
       void fetchLogs()
       return { data: log as WorkoutLog, error: null }

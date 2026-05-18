@@ -98,7 +98,8 @@ export function useRoutines(studentId?: string) {
         .from('routines')
         .select(`
           *,
-          student:profiles!student_id(*)
+          student:profiles!student_id(*),
+          routine_days(id)
         `)
         .order('created_at', { ascending: false })
 
@@ -159,19 +160,21 @@ export function useRoutines(studentId?: string) {
       if (error) throw error
       if (!data) return { data: null, error: 'Rutina no encontrada' }
 
+      const routineWithDays = data as RoutineWithDays
+
       // Ordenar los datos
-      if (data?.routine_days) {
-        data.routine_days.sort((a: RoutineDay, b: RoutineDay) => a.day_number - b.day_number)
-        data.routine_days.forEach((day: any) => {
+      if (routineWithDays.routine_days) {
+        routineWithDays.routine_days.sort((a: RoutineDay, b: RoutineDay) => a.day_number - b.day_number)
+        routineWithDays.routine_days.forEach(day => {
           if (day.routine_blocks) {
             day.routine_blocks.sort((a: RoutineBlock, b: RoutineBlock) => a.block_order - b.block_order)
-            day.routine_blocks.forEach((block: any) => {
+            day.routine_blocks.forEach(block => {
               if (block.block_exercises) {
                 if (!options.includeInactiveBlockExercises) {
                   block.block_exercises = block.block_exercises.filter((ex: BlockExercise) => ex.active !== false)
                 }
                 block.block_exercises.sort((a: BlockExercise, b: BlockExercise) => a.position - b.position)
-                block.block_exercises.forEach((ex: any) => {
+                block.block_exercises.forEach(ex => {
                   if (ex.prescribed_sets) {
                     ex.prescribed_sets.sort((a: PrescribedSet, b: PrescribedSet) =>
                       a.week_number - b.week_number || a.set_number - b.set_number
@@ -184,7 +187,7 @@ export function useRoutines(studentId?: string) {
         })
       }
 
-      return { data: data as RoutineWithDays, error: null }
+      return { data: routineWithDays, error: null }
     } catch (err) {
       return { data: null, error: err instanceof Error ? err.message : 'Error al cargar rutina' }
     }

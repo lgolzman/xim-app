@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
@@ -55,6 +55,7 @@ interface RoutineFormProps {
   studentId?: string // Pre-selected student
   onSubmit: (data: FormData, action: 'draft' | 'active') => Promise<void>
   onCancel: () => void
+  onChange?: (data: FormData) => void
   isEditing?: boolean
   routineStatus?: 'draft' | 'active' | 'archived'
   loading?: boolean
@@ -92,6 +93,7 @@ export function RoutineForm({
   studentId,
   onSubmit,
   onCancel,
+  onChange,
   isEditing = false,
   routineStatus,
   loading = false,
@@ -128,6 +130,10 @@ export function RoutineForm({
     const initialDays = initialData?.days || []
     return new Set(initialDays.slice(0, -1).map(day => day.id))
   })
+
+  useEffect(() => {
+    onChange?.(formData)
+  }, [formData, onChange])
 
   // Filtrar ejercicios para el modal de selección
   const filteredExercises = exercises.filter(e =>
