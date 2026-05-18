@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -13,6 +13,9 @@ export function LoginForm() {
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false)
   const { signIn } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from
+  const redirectTo = `${from?.pathname || '/'}${from?.search || ''}`
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,7 +28,7 @@ export function LoginForm() {
       setError(error.message)
       setLoading(false)
     } else {
-      navigate('/')
+      navigate(redirectTo, { replace: true })
     }
   }
 
