@@ -1,9 +1,12 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { LoginForm } from '../components/auth/LoginForm'
 import { useAuth } from '../context/AuthContext'
 
 export function Login() {
   const { user, loading } = useAuth()
+  const location = useLocation()
+  const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from
+  const redirectTo = `${from?.pathname || '/'}${from?.search || ''}`
 
   if (loading) {
     return (
@@ -14,7 +17,7 @@ export function Login() {
   }
 
   if (user) {
-    return <Navigate to="/" replace />
+    return <Navigate to={redirectTo} replace />
   }
 
   return <LoginForm />
