@@ -54,6 +54,14 @@ export function Header() {
                 )}
                 {isAdmin && (
                   <Link
+                    to="/admin/students"
+                    className="text-gray-600 hover:text-gray-900 text-sm font-medium"
+                  >
+                    Alumnos
+                  </Link>
+                )}
+                {isAdmin && (
+                  <Link
                     to="/admin"
                     className="text-gray-600 hover:text-gray-900 text-sm font-medium"
                   >
@@ -151,6 +159,15 @@ export function Header() {
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Historial
+                </Link>
+              )}
+              {isAdmin && (
+                <Link
+                  to="/admin/students"
+                  className="px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-sm font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Alumnos
                 </Link>
               )}
               {isAdmin && (

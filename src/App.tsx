@@ -13,6 +13,7 @@ import { WorkoutHistory } from './pages/WorkoutHistory'
 import { WorkoutDetail } from './pages/WorkoutDetail'
 import { RoutineOverview } from './pages/RoutineOverview'
 import { Admin } from './pages/Admin'
+import { Students } from './pages/admin/Students'
 import { StudentDetail } from './pages/admin/StudentDetail'
 import { AdminWorkoutDetail } from './pages/admin/AdminWorkoutDetail'
 import { RoutineNew } from './pages/admin/RoutineNew'
@@ -106,6 +107,15 @@ function App() {
             element={
               <ProtectedRoute requireAdmin>
                 <Admin />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/students"
+            element={
+              <ProtectedRoute requireAdmin>
+                <Students />
               </ProtectedRoute>
             }
           />
