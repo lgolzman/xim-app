@@ -120,11 +120,11 @@ Deno.serve(async req => {
       { data: student, error: studentError },
       { data: routine, error: routineError },
       { data: routineDay, error: routineDayError },
-      { data: exerciseNotes, error: notesError },
+      exerciseNotesResult,
     ] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, email, full_name, name')
+        .select('*')
         .eq('id', log.student_id)
         .single<Profile>(),
       supabase
@@ -144,16 +144,20 @@ Deno.serve(async req => {
         .returns<ExerciseNoteRow[]>(),
     ])
 
-    if (studentError || routineError || routineDayError || notesError) {
+    if (studentError || routineError || routineDayError) {
       console.error('Could not load workout notification details', {
         studentError,
         routineError,
         routineDayError,
-        notesError,
       })
       return jsonResponse({ error: 'Could not load workout details' }, 500)
     }
 
+    if (exerciseNotesResult.error) {
+      console.error('Could not load workout exercise notes for notification', exerciseNotesResult.error)
+    }
+
+    const exerciseNotes = exerciseNotesResult.error ? [] : exerciseNotesResult.data
     const blockExerciseIds = (exerciseNotes || []).map(note => note.block_exercise_id)
     const exerciseNameByBlockExerciseId = new Map<string, string>()
 
