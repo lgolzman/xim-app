@@ -24,6 +24,7 @@ export function RoutineNew() {
   const [selectedRoutineId, setSelectedRoutineId] = useState('')
   const [copying, setCopying] = useState(false)
   const [initialFormData, setInitialFormData] = useState<RoutineFormData | undefined>(undefined)
+  const [currentFormData, setCurrentFormData] = useState<RoutineFormData | null>(null)
   const [formKey, setFormKey] = useState(0)
 
   const handleSubmit = async (formData: RoutineFormData, action: 'draft' | 'active') => {
@@ -91,12 +92,17 @@ export function RoutineNew() {
     if (studentId) {
       navigate(`/admin/students/${studentId}`)
     } else {
-      navigate('/admin')
+      navigate('/admin/students')
     }
   }
 
   const handleCopyRoutine = async () => {
     if (!selectedRoutineId) return
+
+    if (formHasData(currentFormData, studentId)) {
+      const shouldReplace = window.confirm('¿Querés reemplazar los datos actuales con la rutina seleccionada?')
+      if (!shouldReplace) return
+    }
 
     setCopying(true)
     setError(null)
@@ -108,7 +114,9 @@ export function RoutineNew() {
       return
     }
 
-    setInitialFormData(routineToFormData(data))
+    const copiedFormData = routineToFormData(data)
+    setInitialFormData(copiedFormData)
+    setCurrentFormData(copiedFormData)
     setFormKey(prev => prev + 1)
     setCopying(false)
     setCopyModalOpen(false)
@@ -117,9 +125,10 @@ export function RoutineNew() {
 
   const routineOptions = routines.map(routine => {
     const studentName = routine.student?.full_name || routine.student?.name || routine.student?.email || 'Alumno'
+    const dayCount = routine.routine_days?.length || 0
     return {
       value: routine.id,
-      label: `${routine.name} · ${studentName} · ${getStatusLabel(routine.status)}`,
+      label: `${routine.name} · ${studentName} · ${getStatusLabel(routine.status)} · ${routine.total_weeks} sem · ${dayCount} ${dayCount === 1 ? 'día' : 'días'}`,
     }
   })
 
@@ -128,7 +137,7 @@ export function RoutineNew() {
       <div className="space-y-6">
         <div>
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-            <Link to="/admin" className="hover:text-gray-700">Administración</Link>
+            <Link to="/admin/students" className="hover:text-gray-700">Alumnos</Link>
             <span>/</span>
             <span>Nueva rutina</span>
           </div>
@@ -164,6 +173,7 @@ export function RoutineNew() {
           studentId={initialFormData ? undefined : studentId}
           onSubmit={handleSubmit}
           onCancel={handleCancel}
+          onChange={setCurrentFormData}
           loading={loading}
         />
       </div>
@@ -251,6 +261,21 @@ function routineToFormData(routine: RoutineWithDays): RoutineFormData {
       })),
     })),
   }
+}
+
+function formHasData(formData: RoutineFormData | null, initialStudentId?: string) {
+  if (!formData) return false
+  if (formData.name.trim()) return true
+  if (formData.student_id && formData.student_id !== initialStudentId) return true
+  if (formData.total_weeks !== 4) return true
+  if (formData.days.length > 1) return true
+
+  return formData.days.some(day => {
+    if (day.name.trim()) return true
+    if (day.blocks.length > 1) return true
+
+    return day.blocks.some(block => block.exercises.length > 0)
+  })
 }
 
 function formSetFromPrescribedSet(set: PrescribedSet) {
