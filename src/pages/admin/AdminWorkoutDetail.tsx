@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, Link } from 'react-router-dom'
 import { Layout } from '../../components/layout/Layout'
 import { Button } from '../../components/ui/Button'
 import { supabase } from '../../lib/supabase'
-import { useWorkoutLogs } from '../../hooks/useWorkoutLogs'
-import { useActiveRoutine } from '../../hooks/useActiveRoutine'
-import type { WorkoutLogWithDetails, RoutineDayWithBlocks, LoggedSet, PrescribedSet, Student } from '../../lib/types'
+import { useRoutines } from '../../hooks/useRoutines'
+import type { WorkoutExerciseNote, WorkoutLogWithDetails, RoutineDayWithBlocks, LoggedSet, PrescribedSet, Student } from '../../lib/types'
 
 export function AdminWorkoutDetail() {
   const { studentId, logId } = useParams<{ studentId: string; logId: string }>()
-  const { routine, loading: routineLoading, getDayById } = useActiveRoutine(studentId, {
-    includeInactiveBlockExercises: true,
-  })
-  const { getLogById } = useWorkoutLogs(studentId, routine?.id)
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { getRoutineWithDetails } = useRoutines()
+  const cameFromReport = Boolean((location.state as { fromReport?: boolean } | null)?.fromReport)
 
   const [log, setLog] = useState<WorkoutLogWithDetails | null>(null)
   const [day, setDay] = useState<RoutineDayWithBlocks | null>(null)
@@ -21,40 +20,98 @@ export function AdminWorkoutDetail() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let isMounted = true
+
     const fetchData = async () => {
       if (!logId || !studentId) return
+      setLoading(true)
+      setError(null)
 
-      // Fetch student info
       const { data: studentData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', studentId)
         .single()
 
+      if (!isMounted) return
+
       if (studentData) {
         setStudent(studentData as Student)
       }
 
-      // Wait for routine to load before fetching log
-      if (routineLoading) return
+      const { data, error } = await supabase
+        .from('workout_logs')
+        .select(`
+          *,
+          routine_day:routine_days(*),
+          logged_sets(*)
+        `)
+        .eq('id', logId)
+        .eq('student_id', studentId)
+        .maybeSingle()
 
-      const { data, error } = await getLogById(logId)
+      if (!isMounted) return
+
       if (error) {
-        setError(error)
+        setError(error.message || 'Error al cargar registro')
         setLoading(false)
         return
       }
 
-      if (data) {
-        setLog(data)
-        const dayData = getDayById(data.routine_day_id)
-        setDay(dayData)
+      if (!data) {
+        setError('No se encontró el registro')
+        setLoading(false)
+        return
       }
+
+      const { data: exerciseNotesData, error: exerciseNotesError } = await supabase
+        .from('workout_exercise_notes')
+        .select('*')
+        .eq('workout_log_id', data.id)
+
+      if (!isMounted) return
+
+      if (exerciseNotesError) {
+        setError(exerciseNotesError.message || 'Error al cargar comentarios')
+        setLoading(false)
+        return
+      }
+
+      const workoutLog = data as WorkoutLogWithDetails
+      workoutLog.workout_exercise_notes = (exerciseNotesData || []) as WorkoutExerciseNote[]
+
+      if (workoutLog.logged_sets) {
+        workoutLog.logged_sets.sort((a: LoggedSet, b: LoggedSet) =>
+          a.block_exercise_id.localeCompare(b.block_exercise_id) || a.set_number - b.set_number
+        )
+      }
+
+      setLog(workoutLog)
+
+      const { data: routineData, error: routineError } = await getRoutineWithDetails(
+        workoutLog.routine_id,
+        { includeInactiveBlockExercises: true }
+      )
+
+      if (!isMounted) return
+
+      if (routineError) {
+        setError(routineError)
+        setLoading(false)
+        return
+      }
+
+      const dayData = routineData?.routine_days.find(routineDay => routineDay.id === workoutLog.routine_day_id) || null
+      setDay(dayData)
       setLoading(false)
     }
 
     fetchData()
-  }, [logId, studentId, routineLoading, getLogById, getDayById])
+
+    return () => {
+      isMounted = false
+    }
+  }, [logId, studentId, getRoutineWithDetails])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -80,6 +137,22 @@ export function AdminWorkoutDetail() {
     )
   }
 
+  const getExerciseNote = (blockExerciseId: string): WorkoutExerciseNote | undefined => {
+    return log?.workout_exercise_notes?.find(note => note.block_exercise_id === blockExerciseId)
+  }
+
+  const exerciseNameByBlockExerciseId = new Map<string, string>()
+  day?.routine_blocks.forEach(block => {
+    block.block_exercises.forEach(exercise => {
+      exerciseNameByBlockExerciseId.set(
+        exercise.id,
+        `${block.block_letter}${exercise.position} · ${exercise.exercise?.name || 'Ejercicio'}`
+      )
+    })
+  })
+
+  const exerciseNotes = log?.workout_exercise_notes || []
+
   const formatPrescribed = (set: PrescribedSet): string => {
     const qty = set.set_type === 'time' ? `${set.quantity}"` : `${set.quantity} reps`
     const weight = set.weight_kg ? ` / ${set.weight_kg}kg` : ''
@@ -98,7 +171,7 @@ export function AdminWorkoutDetail() {
     return qty + weight
   }
 
-  if (loading || routineLoading) {
+  if (loading) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
@@ -127,7 +200,7 @@ export function AdminWorkoutDetail() {
         {/* Header */}
         <div>
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-            <Link to="/admin" className="hover:text-gray-700">Administración</Link>
+            <Link to="/admin/students" className="hover:text-gray-700">Alumnos</Link>
             <span>/</span>
             <Link to={`/admin/students/${studentId}`} className="hover:text-gray-700">
               {student?.full_name || student?.name || student?.email || 'Alumno'}
@@ -157,6 +230,22 @@ export function AdminWorkoutDetail() {
           </div>
         )}
 
+        {exerciseNotes.length > 0 && (
+          <div className="bg-white border border-blue-200 rounded-lg p-4">
+            <h2 className="text-sm font-semibold text-blue-900 mb-3">Comentarios por ejercicio</h2>
+            <div className="space-y-2">
+              {exerciseNotes.map(note => (
+                <div key={note.id} className="rounded-lg bg-blue-50 px-3 py-2">
+                  <p className="text-xs font-medium text-blue-800">
+                    {exerciseNameByBlockExerciseId.get(note.block_exercise_id) || 'Ejercicio'}
+                  </p>
+                  <p className="text-sm text-blue-700 mt-1">{note.note}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Ejercicios y series */}
         {day ? (
           <div className="space-y-6">
@@ -172,11 +261,12 @@ export function AdminWorkoutDetail() {
                 <div className="divide-y divide-gray-100">
                   {block.block_exercises.map(exercise => {
                     const weekSets = exercise.prescribed_sets.filter(s => s.week_number === log.week_number)
+                    const exerciseNote = getExerciseNote(exercise.id)
 
                     return (
                       <div key={exercise.id} className="p-4">
                         <div className="mb-3">
-                          <span className="text-xs text-gray-500 font-medium">
+                          <span className="mr-2 text-xs text-gray-500 font-medium">
                             {block.block_letter}{exercise.position}
                           </span>
                           <a
@@ -189,6 +279,12 @@ export function AdminWorkoutDetail() {
                           </a>
                           {exercise.note && (
                             <p className="text-sm text-gray-500 mt-1">📝 {exercise.note}</p>
+                          )}
+                          {exerciseNote && (
+                            <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                              <p className="text-xs font-medium text-blue-800 mb-1">Comentario del alumno</p>
+                              <p className="text-sm text-blue-700">{exerciseNote.note}</p>
+                            </div>
                           )}
                         </div>
 
@@ -236,7 +332,12 @@ export function AdminWorkoutDetail() {
         )}
 
         {/* Volver */}
-        <div className="pt-4">
+        <div className="flex flex-wrap gap-3 pt-4">
+          {cameFromReport && (
+            <Button variant="secondary" onClick={() => navigate(-1)}>
+              Volver al reporte
+            </Button>
+          )}
           <Link to={`/admin/students/${studentId}`}>
             <Button variant="secondary">Volver al alumno</Button>
           </Link>
