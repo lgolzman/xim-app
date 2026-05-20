@@ -180,6 +180,11 @@ export function StudentDetail() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            <Link to={`/admin/students/${student.id}/register-workout`}>
+              <Button variant="secondary">
+                Registrar entrenamiento
+              </Button>
+            </Link>
             {student.active !== false ? (
               <Button
                 variant="ghost"

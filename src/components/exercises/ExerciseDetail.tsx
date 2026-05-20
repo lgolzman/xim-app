@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '../ui/Button'
 import { useAuth } from '../../context/AuthContext'
 import type { ExerciseWithRelations } from '../../lib/types'
@@ -8,10 +9,29 @@ interface ExerciseDetailProps {
   onDelete: () => void
   onClose: () => void
   showAdminActions?: boolean
+  initialSection?: 'photos'
 }
 
-export function ExerciseDetail({ exercise, onEdit, onDelete, onClose, showAdminActions = true }: ExerciseDetailProps) {
+export function ExerciseDetail({ exercise, onEdit, onDelete, onClose, showAdminActions = true, initialSection }: ExerciseDetailProps) {
   const { isAdmin } = useAuth()
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0)
+  const photosRef = useRef<HTMLDivElement | null>(null)
+  const photos = exercise.photos || []
+
+  useEffect(() => {
+    if (initialSection === 'photos' && photos.length > 0) {
+      photosRef.current?.scrollIntoView({ block: 'start' })
+    }
+  }, [initialSection, photos.length])
+
+  const safePhotoIndex = selectedPhotoIndex < photos.length ? selectedPhotoIndex : 0
+  const selectedPhoto = photos[safePhotoIndex]
+  const showPreviousPhoto = () => {
+    setSelectedPhotoIndex((current) => (current === 0 ? photos.length - 1 : current - 1))
+  }
+  const showNextPhoto = () => {
+    setSelectedPhotoIndex((current) => (current === photos.length - 1 ? 0 : current + 1))
+  }
 
   return (
     <div className="space-y-6">
@@ -69,6 +89,62 @@ export function ExerciseDetail({ exercise, onEdit, onDelete, onClose, showAdminA
         <div>
           <h4 className="text-sm font-medium text-gray-700 mb-2">Tips de ejecución</h4>
           <p className="text-gray-600 whitespace-pre-wrap">{exercise.execution_tips}</p>
+        </div>
+      )}
+
+      {photos.length > 0 && selectedPhoto && (
+        <div ref={photosRef}>
+          <h4 className="text-sm font-medium text-gray-700 mb-2">Fotos de referencia</h4>
+          <div className="space-y-3">
+            <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+              <img
+                src={selectedPhoto.public_url}
+                alt={`${exercise.name} - foto ${selectedPhoto.display_order}`}
+                className="max-h-[28rem] w-full object-contain"
+              />
+              {photos.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={showPreviousPhoto}
+                    className="absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
+                    aria-label="Foto anterior"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={showNextPhoto}
+                    className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
+                    aria-label="Foto siguiente"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+            </div>
+            {photos.length > 1 && (
+              <div className="grid grid-cols-3 gap-2">
+                {photos.map((photo, index) => (
+                  <button
+                    key={photo.id}
+                    type="button"
+                    onClick={() => setSelectedPhotoIndex(index)}
+                    className={`overflow-hidden rounded-md border ${
+                      index === safePhotoIndex ? 'border-gray-900 ring-2 ring-gray-900/20' : 'border-gray-200'
+                    }`}
+                    aria-label={`Ver foto ${photo.display_order}`}
+                  >
+                    <img
+                      src={photo.public_url}
+                      alt={`${exercise.name} - miniatura ${photo.display_order}`}
+                      className="h-20 w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

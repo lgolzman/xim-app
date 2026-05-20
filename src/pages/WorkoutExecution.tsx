@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext'
 import { useActiveRoutine } from '../hooks/useActiveRoutine'
 import { useWorkoutLogs } from '../hooks/useWorkoutLogs'
 import { useExercises } from '../hooks/useExercises'
+import { useNextWorkout } from '../hooks/useNextWorkout'
 import type { CreateLoggedSetData } from '../hooks/useWorkoutLogs'
 import type { BlockExerciseWithDetails, ExerciseWithRelations, LoggedSet, RoutineDayWithBlocks } from '../lib/types'
 
@@ -25,14 +26,18 @@ interface SetInput {
 
 export function WorkoutExecution() {
   const navigate = useNavigate()
-  const { dayId } = useParams<{ dayId: string }>()
+  const { dayId, studentId } = useParams<{ dayId?: string; studentId?: string }>()
   const [searchParams] = useSearchParams()
-  const weekNumber = parseInt(searchParams.get('week') || '1')
 
   const { user } = useAuth()
-  const { routine, loading: routineLoading } = useActiveRoutine(user?.id)
-  const { logs, createWorkoutLog } = useWorkoutLogs(user?.id, routine?.id)
+  const isAdminProxy = Boolean(studentId)
+  const targetStudentId = isAdminProxy ? studentId : user?.id
+  const { info: nextWorkoutInfo, loading: nextWorkoutLoading } = useNextWorkout(isAdminProxy ? studentId : undefined)
+  const { routine, loading: routineLoading } = useActiveRoutine(targetStudentId)
+  const { logs, createWorkoutLog } = useWorkoutLogs(targetStudentId, routine?.id)
   const { exercises } = useExercises()
+  const activeDayId = dayId || nextWorkoutInfo?.suggestedDay?.id
+  const weekNumber = parseInt(searchParams.get('week') || String(nextWorkoutInfo?.currentWeek || 1))
 
   const [day, setDay] = useState<RoutineDayWithBlocks | null>(null)
   const [setInputs, setSetInputs] = useState<SetInput[]>([])
@@ -43,13 +48,14 @@ export function WorkoutExecution() {
   const [completedBlockIds, setCompletedBlockIds] = useState<Set<string>>(new Set())
   const [selectedExercise, setSelectedExercise] = useState<ExerciseWithRelations | null>(null)
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false)
+  const [exerciseModalSection, setExerciseModalSection] = useState<'photos' | undefined>(undefined)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Inicializar datos del día cuando carga la rutina
   useEffect(() => {
-    if (!routineLoading && dayId) {
-      const dayData = routine?.routine_days.find(d => d.id === dayId)
+    if (!routineLoading && !nextWorkoutLoading && activeDayId) {
+      const dayData = routine?.routine_days.find(d => d.id === activeDayId)
       if (dayData) {
         setDay(dayData)
 
@@ -79,7 +85,7 @@ export function WorkoutExecution() {
         setCompletedBlockIds(new Set())
       }
     }
-  }, [routineLoading, routine, dayId, weekNumber])
+  }, [routineLoading, nextWorkoutLoading, routine, activeDayId, weekNumber])
 
   const updateSetInput = (blockExerciseId: string, setNumber: number, field: string, value: string) => {
     setSetInputs(prev =>
@@ -169,7 +175,7 @@ export function WorkoutExecution() {
     })
   }
 
-  const openExerciseDetail = (blockExercise: BlockExerciseWithDetails) => {
+  const openExerciseDetail = (blockExercise: BlockExerciseWithDetails, initialSection?: 'photos') => {
     const exercise = exercises.find(ex => ex.id === blockExercise.exercise_id)
 
     if (exercise) {
@@ -182,14 +188,16 @@ export function WorkoutExecution() {
         primary_muscles: [],
         synergist_muscles: [],
         videos: blockExercise.exercise.videos || [],
+        photos: blockExercise.exercise.photos || [],
       })
     }
 
+    setExerciseModalSection(initialSection)
     setExerciseModalOpen(true)
   }
 
   const handleComplete = async () => {
-    if (!routine || !day || !user) return
+    if (!routine || !day || !user || !targetStudentId) return
 
     setSaving(true)
     setError(null)
@@ -229,15 +237,14 @@ export function WorkoutExecution() {
         student_note: studentNote || undefined,
         logged_sets: loggedSets,
         exercise_notes: exerciseNotesToSave,
-      }, user.id)
+      }, targetStudentId, user.id)
 
       if (createError) {
         setError(createError)
         return
       }
 
-      // Redirigir al home
-      navigate('/')
+      navigate(isAdminProxy && studentId ? `/admin/students/${studentId}` : '/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar entrenamiento')
     } finally {
@@ -249,7 +256,7 @@ export function WorkoutExecution() {
     navigate(-1)
   }
 
-  if (routineLoading) {
+  if (routineLoading || nextWorkoutLoading) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
@@ -367,6 +374,7 @@ export function WorkoutExecution() {
                     {block.block_exercises.map(exercise => {
                       const weekSets = exercise.prescribed_sets.filter(s => s.week_number === weekNumber)
                       const videos = exercise.exercise?.videos || []
+                      const photos = exercise.exercise?.photos || []
 
                       return (
                         <div key={exercise.id} className="p-4">
@@ -383,6 +391,15 @@ export function WorkoutExecution() {
                             >
                               {exercise.exercise?.name}
                             </button>
+                            {photos.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => openExerciseDetail(exercise, 'photos')}
+                                className="inline-flex items-center rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                              >
+                                Fotos
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => toggleExerciseNote(exercise.id)}
@@ -534,7 +551,10 @@ export function WorkoutExecution() {
 
       <Modal
         isOpen={exerciseModalOpen}
-        onClose={() => setExerciseModalOpen(false)}
+        onClose={() => {
+          setExerciseModalOpen(false)
+          setExerciseModalSection(undefined)
+        }}
         title={selectedExercise?.name || ''}
         size="lg"
       >
@@ -543,8 +563,12 @@ export function WorkoutExecution() {
             exercise={selectedExercise}
             onEdit={() => undefined}
             onDelete={() => undefined}
-            onClose={() => setExerciseModalOpen(false)}
+            onClose={() => {
+              setExerciseModalOpen(false)
+              setExerciseModalSection(undefined)
+            }}
             showAdminActions={false}
+            initialSection={exerciseModalSection}
           />
         )}
       </Modal>

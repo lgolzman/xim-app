@@ -132,7 +132,11 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
   }
 
   // Crear un nuevo registro de entrenamiento
-  const createWorkoutLog = async (data: CreateWorkoutLogData, studentId: string): Promise<{ data: WorkoutLog | null; error: string | null }> => {
+  const createWorkoutLog = async (
+    data: CreateWorkoutLogData,
+    studentId: string,
+    registeredBy?: string
+  ): Promise<{ data: WorkoutLog | null; error: string | null }> => {
     try {
       // 1. Crear el workout log
       const { data: log, error: logError } = await supabase
@@ -143,6 +147,7 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
           routine_day_id: data.routine_day_id,
           week_number: data.week_number,
           student_note: data.student_note || null,
+          registered_by: registeredBy || studentId,
         })
         .select()
         .single()

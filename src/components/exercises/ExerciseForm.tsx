@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { MultiSelect } from '../ui/MultiSelect'
 import { TextArea } from '../ui/TextArea'
-import type { ExerciseFormData, ExerciseWithRelations, ChainType, MovementPattern, Muscle } from '../../lib/types'
+import type { ExerciseFormData, ExercisePhoto, ExerciseWithRelations, ChainType, MovementPattern, Muscle } from '../../lib/types'
 import type { Direction } from '../../lib/types'
 
 interface ExerciseFormProps {
@@ -17,6 +17,19 @@ interface ExerciseFormProps {
   muscles: Muscle[]
 }
 
+interface PhotoSlot {
+  order: 1 | 2 | 3
+  existingPhoto: ExercisePhoto | null
+  file: File | null
+  previewUrl: string | null
+  deleted: boolean
+  error: string | null
+}
+
+const PHOTO_ORDERS: Array<1 | 2 | 3> = [1, 2, 3]
+const ACCEPTED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const MAX_PHOTO_SIZE = 5 * 1024 * 1024
+
 export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, directions, muscles }: ExerciseFormProps) {
 
   const [name, setName] = useState('')
@@ -27,8 +40,28 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, 
   const [primaryMuscleIds, setPrimaryMuscleIds] = useState<string[]>([])
   const [synergistMuscleIds, setSynergistMuscleIds] = useState<string[]>([])
   const [videos, setVideos] = useState<{ url: string; title: string }[]>([])
+  const [photoSlots, setPhotoSlots] = useState<PhotoSlot[]>(
+    PHOTO_ORDERS.map((order) => ({
+      order,
+      existingPhoto: null,
+      file: null,
+      previewUrl: null,
+      deleted: false,
+      error: null,
+    }))
+  )
+  const photoSlotsRef = useRef(photoSlots)
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    photoSlotsRef.current = photoSlots
+  }, [photoSlots])
 
   useEffect(() => {
+    photoSlotsRef.current.forEach((slot) => {
+      if (slot.previewUrl) URL.revokeObjectURL(slot.previewUrl)
+    })
+
     if (exercise) {
       setName(exercise.name)
       setMovementPatternId(exercise.movement_pattern_id || '')
@@ -38,8 +71,42 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, 
       setPrimaryMuscleIds(exercise.primary_muscles.map((m) => m.id))
       setSynergistMuscleIds(exercise.synergist_muscles.map((m) => m.id))
       setVideos(exercise.videos.map((v) => ({ url: v.url, title: v.title || '' })))
+      setPhotoSlots(PHOTO_ORDERS.map((order) => ({
+        order,
+        existingPhoto: exercise.photos.find((photo) => photo.display_order === order) || null,
+        file: null,
+        previewUrl: null,
+        deleted: false,
+        error: null,
+      })))
+    } else {
+      setName('')
+      setMovementPatternId('')
+      setDirectionId('')
+      setChainType('')
+      setExecutionTips('')
+      setPrimaryMuscleIds([])
+      setSynergistMuscleIds([])
+      setVideos([])
+      setPhotoSlots(PHOTO_ORDERS.map((order) => ({
+        order,
+        existingPhoto: null,
+        file: null,
+        previewUrl: null,
+        deleted: false,
+        error: null,
+      })))
     }
   }, [exercise])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    return () => {
+      photoSlotsRef.current.forEach((slot) => {
+        if (slot.previewUrl) URL.revokeObjectURL(slot.previewUrl)
+      })
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,6 +120,12 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, 
       primary_muscle_ids: primaryMuscleIds,
       synergist_muscle_ids: synergistMuscleIds,
       videos: videos.filter((v) => v.url.trim()),
+      photos: photoSlots
+        .filter((slot) => slot.file)
+        .map((slot) => ({ file: slot.file as File, order: slot.order })),
+      deleted_photo_ids: photoSlots
+        .filter((slot) => slot.deleted && slot.existingPhoto)
+        .map((slot) => (slot.existingPhoto as ExercisePhoto).id),
     })
   }
 
@@ -68,6 +141,58 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, 
 
   const removeVideo = (index: number) => {
     setVideos(videos.filter((_, i) => i !== index))
+  }
+
+  const validatePhoto = (file: File) => {
+    if (!ACCEPTED_PHOTO_TYPES.includes(file.type)) {
+      return 'Usá JPG, PNG o WebP.'
+    }
+
+    if (file.size > MAX_PHOTO_SIZE) {
+      return 'Máximo 5MB por foto.'
+    }
+
+    return null
+  }
+
+  const setPhotoFile = (order: 1 | 2 | 3, file: File | null) => {
+    setPhotoSlots((currentSlots) => currentSlots.map((slot) => {
+      if (slot.order !== order) return slot
+
+      if (slot.previewUrl) URL.revokeObjectURL(slot.previewUrl)
+      if (!file) {
+        return {
+          ...slot,
+          file: null,
+          previewUrl: null,
+          deleted: Boolean(slot.existingPhoto),
+          error: null,
+        }
+      }
+
+      const validationError = validatePhoto(file)
+      if (validationError) {
+        return {
+          ...slot,
+          file: null,
+          previewUrl: null,
+          error: validationError,
+        }
+      }
+
+      return {
+        ...slot,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        deleted: Boolean(slot.existingPhoto),
+        error: null,
+      }
+    }))
+  }
+
+  const handlePhotoInput = (order: 1 | 2 | 3, fileList: FileList | null) => {
+    const file = fileList?.[0]
+    if (file) setPhotoFile(order, file)
   }
 
   const muscleOptions = muscles.map((m) => ({ value: m.id, label: m.name }))
@@ -136,6 +261,79 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, 
         placeholder="Escribe consejos para la correcta ejecución del ejercicio..."
         rows={4}
       />
+
+      <div className="space-y-3">
+        <label className="block text-sm font-medium text-gray-700">
+          Fotos de referencia
+        </label>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {photoSlots.map((slot) => {
+            const imageUrl = slot.previewUrl || (!slot.deleted ? slot.existingPhoto?.public_url : null)
+            const inputId = `exercise-photo-${slot.order}`
+
+            return (
+              <div key={slot.order} className="space-y-2">
+                <div
+                  className="relative flex min-h-36 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-center"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setPhotoFile(slot.order, e.dataTransfer.files[0] || null)
+                  }}
+                >
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={`Foto ${slot.order}`}
+                      className="h-32 w-full rounded-md object-cover"
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700">Foto {slot.order}</p>
+                      <p className="text-xs text-gray-500">JPG, PNG o WebP hasta 5MB</p>
+                      <label
+                        htmlFor={inputId}
+                        className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-gray-700 ring-1 ring-gray-300 hover:bg-gray-100"
+                      >
+                        Subir foto
+                      </label>
+                    </div>
+                  )}
+                  <input
+                    id={inputId}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(e) => handlePhotoInput(slot.order, e.target.files)}
+                  />
+                </div>
+                {imageUrl && (
+                  <div className="flex gap-2">
+                    <label
+                      htmlFor={inputId}
+                      className="inline-flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Cambiar
+                    </label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPhotoFile(slot.order, null)}
+                      className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                    >
+                      Eliminar
+                    </Button>
+                  </div>
+                )}
+                {slot.error && (
+                  <p className="text-xs text-red-600">{slot.error}</p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">

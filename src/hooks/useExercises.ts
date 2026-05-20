@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { ExerciseWithRelations, ExerciseFormData, Exercise } from '../lib/types'
+import { deleteExercisePhoto, uploadExercisePhoto, withPhotoPublicUrl } from './useExercisePhotos'
 
 export function useExercises() {
   const [exercises, setExercises] = useState<ExerciseWithRelations[]>([])
@@ -41,11 +42,17 @@ export function useExercises() {
             .from('exercise_videos')
             .select('*')
             .eq('exercise_id', exercise.id)
+          const photosQuery = supabase
+            .from('exercise_photos')
+            .select('*')
+            .eq('exercise_id', exercise.id)
+            .order('display_order')
 
-          const [primaryMuscles, synergistMuscles, videos] = await Promise.all([
+          const [primaryMuscles, synergistMuscles, videos, photos] = await Promise.all([
             primaryMusclesQuery,
             synergistMusclesQuery,
             videosQuery,
+            photosQuery,
           ])
 
           return {
@@ -53,6 +60,7 @@ export function useExercises() {
             primary_muscles: primaryMuscles.data?.map((pm: any) => pm.muscle) || [],
             synergist_muscles: synergistMuscles.data?.map((sm: any) => sm.muscle) || [],
             videos: videos.data || [],
+            photos: photos.data?.map(withPhotoPublicUrl) || [],
           } as ExerciseWithRelations
         })
       )
@@ -134,6 +142,10 @@ export function useExercises() {
         if (vidError) throw vidError
       }
 
+      for (const photo of data.photos) {
+        await uploadExercisePhoto(newExercise.id, photo.file, photo.order)
+      }
+
       await fetchExercises()
       return { error: null }
     } catch (err) {
@@ -195,6 +207,14 @@ export function useExercises() {
             })) as any
           )
         if (vidError) throw vidError
+      }
+
+      for (const photoId of data.deleted_photo_ids) {
+        await deleteExercisePhoto(photoId)
+      }
+
+      for (const photo of data.photos) {
+        await uploadExercisePhoto(id, photo.file, photo.order)
       }
 
       await fetchExercises()

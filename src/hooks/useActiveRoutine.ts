@@ -7,6 +7,7 @@ import type {
   BlockExercise,
   PrescribedSet,
 } from '../lib/types'
+import { withPhotoPublicUrl } from './useExercisePhotos'
 
 interface UseActiveRoutineOptions {
   includeInactiveBlockExercises?: boolean
@@ -48,7 +49,8 @@ export function useActiveRoutine(
                   *,
                   movement_pattern:movement_patterns(*),
                   direction:directions(*),
-                  videos:exercise_videos(*)
+                  videos:exercise_videos(*),
+                  photos:exercise_photos(*)
                 ),
                 prescribed_sets(*)
               )
@@ -95,6 +97,12 @@ export function useActiveRoutine(
                     ex.exercise.videos.sort((a: { created_at: string }, b: { created_at: string }) =>
                       a.created_at.localeCompare(b.created_at)
                     )
+                  }
+                  if (ex.exercise?.photos) {
+                    ex.exercise.photos.sort((a: { display_order: number }, b: { display_order: number }) =>
+                      a.display_order - b.display_order
+                    )
+                    ex.exercise.photos = ex.exercise.photos.map(withPhotoPublicUrl)
                   }
                 })
               }
