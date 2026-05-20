@@ -130,6 +130,15 @@ function App() {
           />
 
           <Route
+            path="/admin/students/:studentId/register-workout"
+            element={
+              <ProtectedRoute requireAdmin>
+                <WorkoutExecution />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/admin/students/:studentId/workouts/:logId"
             element={
               <ProtectedRoute requireAdmin>

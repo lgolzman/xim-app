@@ -50,6 +50,15 @@ export interface ExerciseVideo {
   created_at: string
 }
 
+export interface ExercisePhoto {
+  id: string
+  exercise_id: string
+  storage_path: string
+  display_order: 1 | 2 | 3
+  created_at: string
+  public_url?: string
+}
+
 export interface Exercise {
   id: string
   name: string
@@ -67,6 +76,7 @@ export interface ExerciseWithRelations extends Exercise {
   primary_muscles: Muscle[]
   synergist_muscles: Muscle[]
   videos: ExerciseVideo[]
+  photos: ExercisePhoto[]
 }
 
 export interface ExerciseFormData {
@@ -78,6 +88,8 @@ export interface ExerciseFormData {
   primary_muscle_ids: string[]
   synergist_muscle_ids: string[]
   videos: { url: string; title: string }[]
+  photos: { file: File; order: 1 | 2 | 3 }[]
+  deleted_photo_ids: string[]
 }
 
 // =============================================
@@ -140,6 +152,7 @@ export interface PrescribedSet {
 export interface WorkoutLog {
   id: string
   student_id: string
+  registered_by: string | null
   routine_id: string
   routine_day_id: string
   week_number: number
@@ -175,6 +188,7 @@ export interface ExerciseInRoutine extends Exercise {
   movement_pattern?: MovementPattern | null
   direction?: Direction | null
   videos?: ExerciseVideo[]
+  photos?: ExercisePhoto[]
 }
 
 export interface BlockExerciseWithDetails extends BlockExercise {
