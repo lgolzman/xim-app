@@ -8,9 +8,46 @@ export interface Profile {
   name?: string | null
   role: UserRole
   created_at: string
+  birth_date?: string | null
+  height_cm?: number | null
+  weight_kg?: number | null
+  goal?: string | null
+  updated_profile_at?: string | null
   active?: boolean
   disabled_by?: string | null
   disabled_at?: string | null
+}
+
+export interface StudentNote {
+  id: string
+  student_id: string
+  created_by: string
+  note: string
+  created_at: string
+}
+
+export interface StudentPlan {
+  id: string
+  student_id: string
+  plan_description: string
+  current_price: number
+  currency: string
+  increase_frequency_months: number | null
+  next_increase_date: string | null
+  reminder_sent: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface StudentPlanHistory {
+  id: string
+  student_id: string
+  plan_description: string
+  price: number
+  currency: string
+  valid_from: string
+  valid_to: string | null
+  created_at: string
 }
 
 export interface Invitation {

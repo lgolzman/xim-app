@@ -2,28 +2,66 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Layout } from '../../components/layout/Layout'
 import { Button } from '../../components/ui/Button'
+import { Input } from '../../components/ui/Input'
+import { Select } from '../../components/ui/Select'
+import { TextArea } from '../../components/ui/TextArea'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { StudentProgress } from '../../components/admin/StudentProgress'
 import { supabase } from '../../lib/supabase'
 import { useRoutines } from '../../hooks/useRoutines'
 import { useStudents } from '../../hooks/useStudents'
+import { useStudentProfile } from '../../hooks/useStudentProfile'
+import { useStudentPlan } from '../../hooks/useStudentPlan'
 import { useAuth } from '../../context/AuthContext'
 import type { Student, RoutineStatus } from '../../lib/types'
+
+type StudentDetailTab = 'overview' | 'profile' | 'plan'
 
 export function StudentDetail() {
   const { studentId } = useParams<{ studentId: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
   const { enableStudent, disableStudent } = useStudents()
+  const { notes, loadingNotes, updateStudentProfile, addStudentNote } = useStudentProfile(studentId)
+  const { plan, history: planHistory, loading: planLoading, savePlan } = useStudentPlan(studentId)
   const { routines, loading: routinesLoading, updateRoutineStatus, reactivateArchivedRoutine, deleteRoutine } = useRoutines(studentId)
 
   const [student, setStudent] = useState<Student | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [profileForm, setProfileForm] = useState({
+    birth_date: '',
+    height_cm: '',
+    weight_kg: '',
+    goal: '',
+  })
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileMessage, setProfileMessage] = useState<string | null>(null)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [newNote, setNewNote] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
+  const [noteError, setNoteError] = useState<string | null>(null)
+  const [planForm, setPlanForm] = useState({
+    plan_description: '',
+    current_price: '',
+    currency: 'ARS',
+    increase_frequency_months: '',
+    next_increase_date: '',
+  })
+  const [planSaving, setPlanSaving] = useState(false)
+  const [planMessage, setPlanMessage] = useState<string | null>(null)
+  const [planError, setPlanError] = useState<string | null>(null)
 
   const [actionType, setActionType] = useState<'enable' | 'disable' | 'activate' | 'reactivate' | 'archive' | 'delete' | null>(null)
   const [actionRoutineId, setActionRoutineId] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
+  const [activeDetailTab, setActiveDetailTab] = useState<StudentDetailTab>('overview')
+
+  const detailTabs: { id: StudentDetailTab; label: string }[] = [
+    { id: 'overview', label: 'Principal' },
+    { id: 'profile', label: 'Ficha del alumno' },
+    { id: 'plan', label: 'Plan comercial' },
+  ]
 
   useEffect(() => {
     const fetchStudent = async () => {
@@ -37,7 +75,18 @@ export function StudentDetail() {
           .single()
 
         if (error) throw error
-        setStudent(data as Student)
+        const loadedStudent = data as Student
+        setStudent(loadedStudent)
+        setProfileForm({
+          birth_date: loadedStudent.birth_date || '',
+          height_cm: loadedStudent.height_cm !== null && loadedStudent.height_cm !== undefined
+            ? String(loadedStudent.height_cm)
+            : '',
+          weight_kg: loadedStudent.weight_kg !== null && loadedStudent.weight_kg !== undefined
+            ? String(loadedStudent.weight_kg)
+            : '',
+          goal: loadedStudent.goal || '',
+        })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error al cargar alumno')
       } finally {
@@ -48,6 +97,29 @@ export function StudentDetail() {
     fetchStudent()
   }, [studentId])
 
+  useEffect(() => {
+    if (!plan) {
+      setPlanForm({
+        plan_description: '',
+        current_price: '',
+        currency: 'ARS',
+        increase_frequency_months: '',
+        next_increase_date: '',
+      })
+      return
+    }
+
+    setPlanForm({
+      plan_description: plan.plan_description,
+      current_price: String(plan.current_price),
+      currency: plan.currency,
+      increase_frequency_months: plan.increase_frequency_months
+        ? String(plan.increase_frequency_months)
+        : '',
+      next_increase_date: plan.next_increase_date || '',
+    })
+  }, [plan])
+
   const handleStudentAction = (type: 'enable' | 'disable') => {
     setActionType(type)
     setActionRoutineId(null)
@@ -56,6 +128,65 @@ export function StudentDetail() {
   const handleRoutineAction = (routineId: string, type: 'activate' | 'reactivate' | 'archive' | 'delete') => {
     setActionType(type)
     setActionRoutineId(routineId)
+  }
+
+  const handleProfileChange = (field: keyof typeof profileForm, value: string) => {
+    setProfileForm(prev => ({ ...prev, [field]: value }))
+    setProfileMessage(null)
+    setProfileError(null)
+  }
+
+  const handleSaveProfile = async () => {
+    setProfileSaving(true)
+    setProfileError(null)
+    setProfileMessage(null)
+
+    const { data, error } = await updateStudentProfile(profileForm)
+    if (error) {
+      setProfileError(error)
+    } else if (data) {
+      setStudent(data)
+      setProfileMessage('Ficha guardada')
+    }
+
+    setProfileSaving(false)
+  }
+
+  const handleAddNote = async () => {
+    if (!user) return
+
+    setNoteSaving(true)
+    setNoteError(null)
+
+    const { error } = await addStudentNote(newNote, user.id)
+    if (error) {
+      setNoteError(error)
+    } else {
+      setNewNote('')
+    }
+
+    setNoteSaving(false)
+  }
+
+  const handlePlanChange = (field: keyof typeof planForm, value: string) => {
+    setPlanForm(prev => ({ ...prev, [field]: value }))
+    setPlanMessage(null)
+    setPlanError(null)
+  }
+
+  const handleSavePlan = async () => {
+    setPlanSaving(true)
+    setPlanMessage(null)
+    setPlanError(null)
+
+    const { error } = await savePlan(planForm)
+    if (error) {
+      setPlanError(error)
+    } else {
+      setPlanMessage('Plan guardado')
+    }
+
+    setPlanSaving(false)
   }
 
   const confirmAction = async () => {
@@ -108,6 +239,28 @@ export function StudentDetail() {
       month: 'short',
       year: 'numeric',
     })
+  }
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString('es-AR', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  const formatOptionalDate = (dateString: string | null) => {
+    return dateString ? formatDate(dateString) : 'Actual'
+  }
+
+  const formatPrice = (price: number, currency: string) => {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+    }).format(price)
   }
 
   const getActionMessage = () => {
@@ -202,6 +355,249 @@ export function StudentDetail() {
         </div>
 
         {/* Student Info Card */}
+        <div className="border-b border-gray-200">
+          <nav className="flex gap-1 overflow-x-auto">
+            {detailTabs.map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveDetailTab(tab.id)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${
+                  activeDetailTab === tab.id
+                    ? 'border-gray-900 text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Student Profile Section */}
+        {activeDetailTab === 'profile' && (
+        <div className="bg-white border border-gray-200 rounded-lg">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Ficha del alumno</h2>
+          </div>
+          <div className="p-6 space-y-6">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Datos físicos y objetivo</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Input
+                  label="Fecha de nacimiento"
+                  type="date"
+                  value={profileForm.birth_date}
+                  onChange={(e) => handleProfileChange('birth_date', e.target.value)}
+                />
+                <Input
+                  label="Altura (cm)"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={profileForm.height_cm}
+                  onChange={(e) => handleProfileChange('height_cm', e.target.value)}
+                  placeholder="Ej: 165.5"
+                />
+                <Input
+                  label="Peso (kg)"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={profileForm.weight_kg}
+                  onChange={(e) => handleProfileChange('weight_kg', e.target.value)}
+                  placeholder="Ej: 68.50"
+                />
+              </div>
+              <div className="mt-4">
+                <TextArea
+                  label="Objetivo"
+                  value={profileForm.goal}
+                  onChange={(e) => handleProfileChange('goal', e.target.value)}
+                  placeholder="Ej: Ganar masa muscular, bajar de peso, mejorar resistencia..."
+                  rows={3}
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Button onClick={handleSaveProfile} disabled={profileSaving}>
+                  {profileSaving ? 'Guardando...' : 'Guardar cambios'}
+                </Button>
+                {profileMessage && (
+                  <span className="text-sm text-green-700">{profileMessage}</span>
+                )}
+                {profileError && (
+                  <span className="text-sm text-red-600">{profileError}</span>
+                )}
+              </div>
+            </div>
+
+            <div className="border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Notas</h3>
+              <div className="space-y-3">
+                <TextArea
+                  value={newNote}
+                  onChange={(e) => {
+                    setNewNote(e.target.value)
+                    setNoteError(null)
+                  }}
+                  placeholder="Agregar una nota interna sobre el alumno..."
+                  rows={3}
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    onClick={handleAddNote}
+                    disabled={noteSaving || !newNote.trim()}
+                  >
+                    {noteSaving ? 'Agregando...' : 'Agregar nota'}
+                  </Button>
+                  {noteError && (
+                    <span className="text-sm text-red-600">{noteError}</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {loadingNotes ? (
+                  <div className="flex items-center justify-center py-6">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                  </div>
+                ) : notes.length === 0 ? (
+                  <p className="text-sm text-gray-500">Todavía no hay notas para este alumno.</p>
+                ) : (
+                  notes.map(note => (
+                    <div key={note.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                      <p className="text-xs font-medium text-gray-500 mb-2">
+                        {formatDateTime(note.created_at)}
+                      </p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.note}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* Commercial Plan Section */}
+        {activeDetailTab === 'plan' && (
+        <div className="bg-white border border-gray-200 rounded-lg">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Plan comercial</h2>
+          </div>
+          <div className="p-6 space-y-6">
+            {planLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Plan actual</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Descripción del plan"
+                      value={planForm.plan_description}
+                      onChange={(e) => handlePlanChange('plan_description', e.target.value)}
+                      placeholder="Ej: Presencial 2x semana"
+                    />
+                    <div className="grid grid-cols-[1fr_7rem] gap-3">
+                      <Input
+                        label="Precio mensual"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={planForm.current_price}
+                        onChange={(e) => handlePlanChange('current_price', e.target.value)}
+                        placeholder="Ej: 45000"
+                      />
+                      <Input
+                        label="Moneda"
+                        value={planForm.currency}
+                        onChange={(e) => handlePlanChange('currency', e.target.value.toUpperCase())}
+                      />
+                    </div>
+                    <Select
+                      label="Actualización"
+                      value={planForm.increase_frequency_months}
+                      onChange={(e) => handlePlanChange('increase_frequency_months', e.target.value)}
+                      placeholder="Sin frecuencia"
+                      options={[
+                        { value: '1', label: 'Cada 1 mes' },
+                        { value: '2', label: 'Cada 2 meses' },
+                        { value: '3', label: 'Cada 3 meses' },
+                        { value: '4', label: 'Cada 4 meses' },
+                        { value: '6', label: 'Cada 6 meses' },
+                      ]}
+                    />
+                    <Input
+                      label="Próxima fecha de aumento"
+                      type="date"
+                      value={planForm.next_increase_date}
+                      onChange={(e) => handlePlanChange('next_increase_date', e.target.value)}
+                    />
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <Button onClick={handleSavePlan} disabled={planSaving}>
+                      {planSaving ? 'Guardando...' : 'Guardar plan'}
+                    </Button>
+                    {planMessage && (
+                      <span className="text-sm text-green-700">{planMessage}</span>
+                    )}
+                    {planError && (
+                      <span className="text-sm text-red-600">{planError}</span>
+                    )}
+                  </div>
+                  {plan?.next_increase_date && (
+                    <p className="mt-3 text-sm text-gray-500">
+                      Próximo aumento: {formatDate(plan.next_increase_date)}
+                      {plan.reminder_sent && ' · Recordatorio enviado'}
+                    </p>
+                  )}
+                </div>
+
+                <div className="border-t border-gray-200 pt-6">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Historial de precios</h3>
+                  {planHistory.length === 0 ? (
+                    <p className="text-sm text-gray-500">Todavía no hay historial de precios.</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-gray-200">
+                      <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                          <tr>
+                            <th className="px-4 py-3">Período</th>
+                            <th className="px-4 py-3">Plan</th>
+                            <th className="px-4 py-3">Precio</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {planHistory.map(historyItem => (
+                            <tr key={historyItem.id}>
+                              <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                                {formatDate(historyItem.valid_from)} → {formatOptionalDate(historyItem.valid_to)}
+                              </td>
+                              <td className="px-4 py-3 text-gray-900">
+                                {historyItem.plan_description}
+                              </td>
+                              <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
+                                {formatPrice(historyItem.price, historyItem.currency)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        )}
+
+        {/* Routines Section */}
+        {activeDetailTab === 'overview' && (
+        <>
         <div className="bg-white border border-gray-200 rounded-lg p-6">
           <div className="flex items-center gap-4">
             <div className="flex-1">
@@ -223,7 +619,6 @@ export function StudentDetail() {
           </div>
         </div>
 
-        {/* Routines Section */}
         <div className="bg-white border border-gray-200 rounded-lg">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
@@ -324,6 +719,8 @@ export function StudentDetail() {
             <StudentProgress studentId={studentId!} />
           </div>
         </div>
+        </>
+        )}
       </div>
 
       <ConfirmDialog
