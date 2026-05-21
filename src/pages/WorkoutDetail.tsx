@@ -166,7 +166,7 @@ export function WorkoutDetail() {
                     return (
                       <div key={exercise.id} className="p-4">
                         <div className="mb-3">
-                          <span className="text-xs text-gray-500 font-medium">
+                          <span className="mr-2 text-xs text-gray-500 font-medium">
                             {block.block_letter}{exercise.position}
                           </span>
                           <a
