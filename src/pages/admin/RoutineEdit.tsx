@@ -176,7 +176,7 @@ export function RoutineEdit() {
     if (routine) {
       navigate(`/admin/students/${routine.student_id}`)
     } else {
-      navigate('/admin')
+      navigate('/admin/students')
     }
   }
 
@@ -195,7 +195,7 @@ export function RoutineEdit() {
       <Layout>
         <div className="text-center py-12">
           <p className="text-red-600 mb-4">{error || 'Rutina no encontrada'}</p>
-          <Button variant="secondary" onClick={() => navigate('/admin')}>
+          <Button variant="secondary" onClick={() => navigate('/admin/students')}>
             Volver
           </Button>
         </div>
@@ -210,7 +210,7 @@ export function RoutineEdit() {
       <div className="space-y-6">
         <div>
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-            <Link to="/admin" className="hover:text-gray-700">Administración</Link>
+            <Link to="/admin/students" className="hover:text-gray-700">Alumnos</Link>
             <span>/</span>
             <Link to={`/admin/students/${routine.student_id}`} className="hover:text-gray-700">
               Alumno

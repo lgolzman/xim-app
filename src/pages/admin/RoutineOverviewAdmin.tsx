@@ -46,7 +46,7 @@ export function RoutineOverviewAdmin() {
       <Layout>
         <div className="text-center py-12">
           <p className="text-red-600 mb-4">{error || 'Rutina no encontrada'}</p>
-          <Button variant="secondary" onClick={() => navigate('/admin')}>
+          <Button variant="secondary" onClick={() => navigate('/admin/students')}>
             Volver
           </Button>
         </div>
@@ -60,7 +60,7 @@ export function RoutineOverviewAdmin() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-              <Link to="/admin" className="hover:text-gray-700">Administración</Link>
+              <Link to="/admin/students" className="hover:text-gray-700">Alumnos</Link>
               <span>/</span>
               <Link to={`/admin/students/${routine.student_id}`} className="hover:text-gray-700">Alumno</Link>
               <span>/</span>

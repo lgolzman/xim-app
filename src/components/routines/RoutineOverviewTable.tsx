@@ -35,8 +35,8 @@ export function RoutineOverviewTable({ routine }: RoutineOverviewTableProps) {
                   const blockRows = block.block_exercises.map(exercise => (
                     <tr key={exercise.id} className="border-b border-gray-100 last:border-b-0">
                       <td className="px-3 py-3 align-top">
-                        <div className="flex gap-2">
-                          <span className="shrink-0 font-semibold text-gray-500">
+                        <div className="flex gap-3">
+                          <span className="min-w-8 shrink-0 font-semibold text-gray-500">
                             {block.block_letter}{exercise.position}
                           </span>
                           <a

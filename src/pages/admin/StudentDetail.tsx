@@ -306,7 +306,7 @@ export function StudentDetail() {
       <Layout>
         <div className="text-center py-12">
           <p className="text-red-600 mb-4">{error || 'Alumno no encontrado'}</p>
-          <Button variant="secondary" onClick={() => navigate('/admin')}>
+          <Button variant="secondary" onClick={() => navigate('/admin/students')}>
             Volver
           </Button>
         </div>
@@ -321,7 +321,7 @@ export function StudentDetail() {
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-              <Link to="/admin" className="hover:text-gray-700">Administración</Link>
+              <Link to="/admin/students" className="hover:text-gray-700">Alumnos</Link>
               <span>/</span>
               <span>Alumno</span>
             </div>
