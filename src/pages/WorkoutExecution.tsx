@@ -46,6 +46,7 @@ export function WorkoutExecution() {
   const [visibleExerciseNotes, setVisibleExerciseNotes] = useState<Set<string>>(new Set())
   const [expandedBlockIds, setExpandedBlockIds] = useState<Set<string>>(new Set())
   const [completedBlockIds, setCompletedBlockIds] = useState<Set<string>>(new Set())
+  const [selectedWeekByExerciseId, setSelectedWeekByExerciseId] = useState<Record<string, number>>({})
   const [selectedExercise, setSelectedExercise] = useState<ExerciseWithRelations | null>(null)
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false)
   const [exerciseModalSection, setExerciseModalSection] = useState<'photos' | undefined>(undefined)
@@ -81,6 +82,7 @@ export function WorkoutExecution() {
         setSetInputs(inputs)
         setExerciseNotes({})
         setVisibleExerciseNotes(new Set())
+        setSelectedWeekByExerciseId({})
         setExpandedBlockIds(new Set(dayData.routine_blocks[0] ? [dayData.routine_blocks[0].id] : []))
         setCompletedBlockIds(new Set())
       }
@@ -102,6 +104,17 @@ export function WorkoutExecution() {
     return setInputs.find(
       input => input.block_exercise_id === blockExerciseId && input.set_number === setNumber
     )
+  }
+
+  const getSelectedExerciseWeek = (blockExerciseId: string) => {
+    return selectedWeekByExerciseId[blockExerciseId] || weekNumber
+  }
+
+  const selectExerciseWeek = (blockExerciseId: string, selectedWeek: number) => {
+    setSelectedWeekByExerciseId(prev => ({
+      ...prev,
+      [blockExerciseId]: selectedWeek,
+    }))
   }
 
   const getPreviousLoggedSet = (blockExerciseId: string, setNumber: number): LoggedSet | undefined => {
@@ -132,6 +145,38 @@ export function WorkoutExecution() {
     }
 
     return parts.length > 0 ? parts.join(' / ') : null
+  }
+
+  const getLoggedSetForWeek = (selectedWeek: number, blockExerciseId: string, setNumber: number): LoggedSet | undefined => {
+    const logForWeek = logs.find(log =>
+      log.routine_day_id === day?.id &&
+      log.week_number === selectedWeek &&
+      log.logged_sets.some(loggedSet =>
+        loggedSet.block_exercise_id === blockExerciseId &&
+        loggedSet.set_number === setNumber
+      )
+    )
+
+    return logForWeek?.logged_sets.find(loggedSet =>
+      loggedSet.block_exercise_id === blockExerciseId &&
+      loggedSet.set_number === setNumber
+    )
+  }
+
+  const formatPrescribedSet = (set: { set_type: 'reps' | 'time'; quantity: number; weight_kg: number | null }) => {
+    const quantity = set.set_type === 'time' ? `${set.quantity}"` : `${set.quantity} reps`
+    return set.weight_kg !== null ? `${quantity} / ${set.weight_kg}kg` : quantity
+  }
+
+  const formatLoggedSet = (loggedSet: LoggedSet | undefined, setType: 'reps' | 'time') => {
+    if (!loggedSet) return null
+
+    const quantity = setType === 'time'
+      ? (loggedSet.actual_seconds !== null ? `${loggedSet.actual_seconds}"` : null)
+      : (loggedSet.actual_reps !== null ? `${loggedSet.actual_reps} reps` : null)
+    const weight = loggedSet.actual_weight_kg !== null ? `${loggedSet.actual_weight_kg}kg` : null
+
+    return [quantity, weight].filter(Boolean).join(' / ') || null
   }
 
   const toggleExerciseNote = (blockExerciseId: string) => {
@@ -372,7 +417,10 @@ export function WorkoutExecution() {
                 {isExpanded && (
                   <div className="divide-y divide-gray-100">
                     {block.block_exercises.map(exercise => {
-                      const weekSets = exercise.prescribed_sets.filter(s => s.week_number === weekNumber)
+                      const selectedWeek = getSelectedExerciseWeek(exercise.id)
+                      const isCurrentWeek = selectedWeek === weekNumber
+                      const weekSets = exercise.prescribed_sets.filter(s => s.week_number === selectedWeek)
+                      const weekNumbers = Array.from({ length: routine.total_weeks }, (_, index) => index + 1)
                       const videos = exercise.exercise?.videos || []
                       const photos = exercise.exercise?.photos || []
 
@@ -449,70 +497,123 @@ export function WorkoutExecution() {
                         </div>
                       </div>
 
+                      <div className="mb-3 overflow-x-auto">
+                        <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                          {weekNumbers.map(week => (
+                            <button
+                              key={week}
+                              type="button"
+                              onClick={() => selectExerciseWeek(exercise.id, week)}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap ${
+                                selectedWeek === week
+                                  ? 'bg-white text-gray-900 shadow-sm'
+                                  : 'text-gray-500 hover:text-gray-700'
+                              }`}
+                            >
+                              Sem {week}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {!isCurrentWeek && (
+                        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                          Solo lectura · Semana {selectedWeek}
+                        </div>
+                      )}
+
                       {/* Series */}
-                      <div className="space-y-2">
-                        {weekSets.map((set, idx) => {
-                          const input = getSetInput(exercise.id, set.set_number)
-                          const isTimeSet = set.set_type === 'time'
-                          const previousLoggedSet = getPreviousLoggedSet(exercise.id, set.set_number)
-                          const previousLoggedSetText = formatPreviousLoggedSet(previousLoggedSet)
+                      {isCurrentWeek ? (
+                        <div className="space-y-2">
+                          {weekSets.map((set, idx) => {
+                            const input = getSetInput(exercise.id, set.set_number)
+                            const isTimeSet = set.set_type === 'time'
+                            const previousLoggedSet = getPreviousLoggedSet(exercise.id, set.set_number)
+                            const previousLoggedSetText = formatPreviousLoggedSet(previousLoggedSet)
 
-                          return (
-                            <div key={set.id} className="flex items-start gap-2">
-                              <span className="text-sm text-gray-400 w-8 pt-2">{idx + 1}.</span>
+                            return (
+                              <div key={set.id} className="flex items-start gap-2">
+                                <span className="text-sm text-gray-400 w-8 pt-2">{idx + 1}.</span>
 
-                              {/* Prescrito */}
-                              <span className="text-sm text-gray-500 w-24 pt-2">
-                                {isTimeSet ? `${set.quantity}"` : `${set.quantity} reps`}
-                                {set.weight_kg && ` / ${set.weight_kg}kg`}
-                              </span>
+                                {/* Prescrito */}
+                                <span className="text-sm text-gray-500 w-24 pt-2">
+                                  {formatPrescribedSet(set)}
+                                </span>
 
-                              <div className="space-y-1">
-                                {previousLoggedSetText && (
-                                  <p className="text-xs text-gray-400">
-                                    anterior: {previousLoggedSetText}
-                                  </p>
-                                )}
+                                <div className="space-y-1">
+                                  {previousLoggedSetText && (
+                                    <p className="text-xs text-gray-400">
+                                      anterior: {previousLoggedSetText}
+                                    </p>
+                                  )}
 
-                                <div className="flex items-center gap-2">
-                                  {/* Input de reps/tiempo */}
-                                  <Input
-                                    type="number"
-                                    value={isTimeSet ? input?.actual_seconds || '' : input?.actual_reps || ''}
-                                    onChange={(e) => updateSetInput(
-                                      exercise.id,
-                                      set.set_number,
-                                      isTimeSet ? 'actual_seconds' : 'actual_reps',
-                                      e.target.value
-                                    )}
-                                    placeholder={isTimeSet ? 'seg' : 'reps'}
-                                    className="w-20"
-                                    min={0}
-                                  />
-
-                                  {/* Input de peso (solo si hay peso prescrito) */}
-                                  {set.weight_kg !== null && (
+                                  <div className="flex items-center gap-2">
+                                    {/* Input de reps/tiempo */}
                                     <Input
                                       type="number"
-                                      step="0.5"
-                                      value={input?.actual_weight || ''}
+                                      value={isTimeSet ? input?.actual_seconds || '' : input?.actual_reps || ''}
                                       onChange={(e) => updateSetInput(
                                         exercise.id,
                                         set.set_number,
-                                        'actual_weight',
+                                        isTimeSet ? 'actual_seconds' : 'actual_reps',
                                         e.target.value
                                       )}
-                                      placeholder="kg"
+                                      placeholder={isTimeSet ? 'seg' : 'reps'}
                                       className="w-20"
                                       min={0}
                                     />
-                                  )}
+
+                                    {/* Input de peso (solo si hay peso prescrito) */}
+                                    {set.weight_kg !== null && (
+                                      <Input
+                                        type="number"
+                                        step="0.5"
+                                        value={input?.actual_weight || ''}
+                                        onChange={(e) => updateSetInput(
+                                          exercise.id,
+                                          set.set_number,
+                                          'actual_weight',
+                                          e.target.value
+                                        )}
+                                        placeholder="kg"
+                                        className="w-20"
+                                        min={0}
+                                      />
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )
-                        })}
-                      </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                          <div className="grid grid-cols-[3rem_1fr_1fr] gap-2 border-b border-gray-200 px-3 py-2 text-xs font-medium text-gray-500">
+                            <div>Serie</div>
+                            <div>Prescrito</div>
+                            <div>Registrado</div>
+                          </div>
+                          <div className="divide-y divide-gray-200 bg-white">
+                            {weekSets.map((set, idx) => {
+                              const loggedSet = getLoggedSetForWeek(selectedWeek, exercise.id, set.set_number)
+                              const loggedSetText = formatLoggedSet(loggedSet, set.set_type)
+
+                              return (
+                                <div
+                                  key={set.id}
+                                  className="grid grid-cols-[3rem_1fr_1fr] gap-2 px-3 py-2 text-sm"
+                                >
+                                  <div className="text-gray-400">{idx + 1}</div>
+                                  <div className="text-gray-600">{formatPrescribedSet(set)}</div>
+                                  <div className={loggedSetText ? 'font-medium text-gray-900' : 'text-gray-400'}>
+                                    {loggedSetText || 'Sin registro'}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                         </div>
                       )
                     })}
