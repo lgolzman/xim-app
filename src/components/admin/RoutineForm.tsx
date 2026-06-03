@@ -604,7 +604,9 @@ export function RoutineForm({
               onChange={(e) => updateFormData({ student_id: e.target.value })}
               options={students.map(s => {
                 const studentName = s.full_name || s.name
-                return { value: s.id, label: studentName ? `${studentName} (${s.email})` : s.email }
+                const selfLabel = s.role === 'admin' ? ' · Entrenadora' : ''
+                const emailLabel = s.email ? ` (${s.email})` : ''
+                return { value: s.id, label: studentName ? `${studentName}${emailLabel}${selfLabel}` : `Alumno sin nombre${selfLabel}` }
               })}
               placeholder="Seleccionar alumno"
               disabled={!!studentId || studentsLoading}

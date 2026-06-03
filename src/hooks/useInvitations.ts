@@ -44,14 +44,63 @@ export function useInvitations() {
     }
   }, [fetchInvitations])
 
-  const createInvitation = async (email: string, role: UserRole, invitedName?: string): Promise<{ invitation: Invitation | null; error: string | null }> => {
+  const createInvitation = async (
+    email: string,
+    role: UserRole,
+    invitedName?: string,
+    profileId?: string
+  ): Promise<{ invitation: Invitation | null; error: string | null }> => {
     try {
+      const normalizedEmail = email.toLowerCase()
+
+      const { data: existingInvitation, error: existingError } = await supabase
+        .from('invitations')
+        .select('*')
+        .eq('email', normalizedEmail)
+        .eq('used', false)
+        .maybeSingle()
+
+      if (existingError) throw existingError
+
+      if (existingInvitation) {
+        if (
+          profileId &&
+          existingInvitation.profile_id &&
+          existingInvitation.profile_id !== profileId
+        ) {
+          return {
+            invitation: null,
+            error: 'Ya existe una invitación pendiente para ese email vinculada a otro alumno',
+          }
+        }
+
+        if (profileId && !existingInvitation.profile_id) {
+          const { data: updatedInvitation, error: updateError } = await supabase
+            .from('invitations')
+            .update({
+              profile_id: profileId,
+              invited_name: invitedName?.trim() || existingInvitation.invited_name,
+              role,
+            } as any)
+            .eq('id', existingInvitation.id)
+            .select()
+            .single()
+
+          if (updateError) throw updateError
+          await fetchInvitations()
+          return { invitation: updatedInvitation as Invitation, error: null }
+        }
+
+        return { invitation: existingInvitation as Invitation, error: null }
+      }
+
       const { data, error: insertError } = await supabase
         .from('invitations')
         .insert({
-          email: email.toLowerCase(),
+          email: normalizedEmail,
           role,
           invited_name: invitedName?.trim() || null,
+          profile_id: profileId || null,
         } as any)
         .select()
         .single()

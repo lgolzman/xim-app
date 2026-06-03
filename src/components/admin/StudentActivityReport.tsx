@@ -130,7 +130,7 @@ const loggedSetChanged = (
 }
 
 const getStudentName = (student: Student) => {
-  return student.full_name || student.name || student.email
+  return student.full_name || student.name || student.email || 'Alumno sin nombre'
 }
 
 const formatRelativeDate = (dateString: string | null) => {
@@ -176,7 +176,7 @@ export function StudentActivityReport() {
         const { data: studentsData, error: studentsError } = await supabase
           .from('profiles')
           .select('*')
-          .eq('role', 'consulta')
+          .or('role.eq.consulta,is_student.eq.true')
           .order('email')
 
         if (studentsError) throw studentsError
@@ -443,7 +443,7 @@ export function StudentActivityReport() {
                           </span>
                         )}
                       </div>
-                      {(row.student.full_name || row.student.name) && (
+                      {(row.student.full_name || row.student.name) && row.student.email && (
                         <p className="text-xs text-gray-500">{row.student.email}</p>
                       )}
                     </td>

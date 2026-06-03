@@ -1,0 +1,22 @@
+## El botón "Empezar entrenamiento para el alumno" está en blanco con fondo blanco. Recién se lee lo que dice el botón cuando pasas el mouse por arriba. 
+
+## Cuando estoy haciendo una rutina como alumno, en los campos de repeticiones de kilos no me deja ingresar. Hago clic en el campo y intento ingresar un número o un peso y no me deja. 
+
+## Le di completar el día y se quedó con el botón que decía "guardando" y nunca terminó de guardar. Volví a entrar a la aplicación con el mismo usuario y se queda el spinner girando y nunca me responde. Le di actualizar a la página y volvió a mostrarme el login. Entré y veo que el día lo guardo. Es decir, actualizó el entrenamiento, aunque nunca me terminó de confirmar que había guardado. 
+
+## Cuando estoy adentro de un día de entrenamiento, si quiero darle "Cancelar" para volver atrás, no me hace nada dándole clic a ese botón. 
+
+## Cuando estoy haciendo un día de entrenamiento como alumno, estaría bien que, al lado de cada ejercicio, si tiene un link o un vídeo, aparezca el link para que el alumno lo pueda clickear y ver ese vídeo en YouTube o en donde sea la referencia. 
+
+
+## Cuando se está armando una rutina como administrador, debería haber un botón para ver la vista de la rutina completa, similar a la planilla Excel que te pasé como referencia. Ximena necesita ver la rutina como un todo, también mirarla y luego poder hacer correcciones. Es importante esa vista global de la rutina. Incluso creo que también esa vista podría estar para el alumno, para que pueda ver toda su rutina. Aunque en el celular implique hacer algo de scroll horizontal o vertical, me parece que tendría que estar esa vista. 
+
+## En el perfil del alumno, "Ejercicios" no me está funcionando. Le doy click y no me muestra la biblioteca de ejercicios. 
+Además, en el perfil del alumno, al lado de "Ejercicios", creo que debería haber un link que sea como "Mi rutina" o "Mi entrenamiento" para poder entrar a verla. Porque si yo entro a la biblioteca de ejercicios y después quiero volver a entrenar, no tengo ningún lugar donde cliquear para volver a la rutina. 
+
+
+
+
+
+
+

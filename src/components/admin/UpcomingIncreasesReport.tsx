@@ -29,7 +29,7 @@ interface StudentPlanHistoryQueryResult {
 }
 
 const getStudentName = (student: Student) => {
-  return student.full_name || student.name || student.email
+  return student.full_name || student.name || student.email || 'Alumno sin nombre'
 }
 
 const formatFullDate = (dateString: string) => {

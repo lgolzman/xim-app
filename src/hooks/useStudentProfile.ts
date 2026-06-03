@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import type { Student, StudentNote } from '../lib/types'
 
 export interface StudentProfileData {
+  full_name: string
   birth_date: string
   height_cm: string
   weight_kg: string
@@ -68,6 +69,11 @@ export function useStudentProfile(studentId: string | undefined) {
     const weight = profileData.weight_kg.trim()
       ? Number(profileData.weight_kg)
       : null
+    const fullName = profileData.full_name.trim()
+
+    if (!fullName) {
+      return { data: null, error: 'El nombre no puede estar vacío' }
+    }
 
     if (height !== null && (!Number.isFinite(height) || height <= 0)) {
       return { data: null, error: 'La altura debe ser mayor a 0' }
@@ -81,6 +87,8 @@ export function useStudentProfile(studentId: string | undefined) {
       const { data, error } = await supabase
         .from('profiles')
         .update({
+          full_name: fullName,
+          name: fullName,
           birth_date: profileData.birth_date || null,
           height_cm: height,
           weight_kg: weight,

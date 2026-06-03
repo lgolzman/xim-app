@@ -1,9 +1,10 @@
 export type UserRole = 'admin' | 'consulta'
 export type ChainType = 'abierta' | 'cerrada'
+export type AccountStatus = 'pending' | 'active' | 'disabled'
 
 export interface Profile {
   id: string
-  email: string
+  email: string | null
   full_name?: string | null
   name?: string | null
   role: UserRole
@@ -13,6 +14,9 @@ export interface Profile {
   weight_kg?: number | null
   goal?: string | null
   updated_profile_at?: string | null
+  account_status?: AccountStatus
+  created_by_admin?: string | null
+  is_student?: boolean
   active?: boolean
   disabled_by?: string | null
   disabled_at?: string | null
@@ -58,6 +62,7 @@ export interface Invitation {
   token: string
   used: boolean
   created_by: string
+  profile_id?: string | null
   created_at: string
   expires_at: string | null
 }
