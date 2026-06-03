@@ -3,6 +3,14 @@ import { supabase } from '../lib/supabase'
 import type { ExerciseWithRelations, ExerciseFormData, Exercise } from '../lib/types'
 import { deleteExercisePhoto, uploadExercisePhoto, withPhotoPublicUrl } from './useExercisePhotos'
 
+const buildExercisePayload = (data: ExerciseFormData) => ({
+  name: data.name.trim(),
+  movement_pattern_id: data.movement_pattern_id || null,
+  direction_id: data.direction_id || null,
+  chain_type: data.chain_type || null,
+  execution_tips: data.execution_tips.trim() || null,
+})
+
 export function useExercises() {
   const [exercises, setExercises] = useState<ExerciseWithRelations[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,13 +99,7 @@ export function useExercises() {
     try {
       const { data: exerciseResult, error: exerciseError } = await supabase
         .from('exercises')
-        .insert({
-          name: data.name,
-          movement_pattern_id: data.movement_pattern_id || null,
-          direction_id: data.direction_id || null,
-          chain_type: data.chain_type,
-          execution_tips: data.execution_tips || null,
-        } as any)
+        .insert(buildExercisePayload(data))
         .select()
         .single()
 
@@ -157,13 +159,7 @@ export function useExercises() {
     try {
       const { error: exerciseError } = await supabase
         .from('exercises')
-        .update({
-          name: data.name,
-          movement_pattern_id: data.movement_pattern_id || null,
-          direction_id: data.direction_id || null,
-          chain_type: data.chain_type,
-          execution_tips: data.execution_tips || null,
-        } as any)
+        .update(buildExercisePayload(data))
         .eq('id', id)
 
       if (exerciseError) throw exerciseError

@@ -12,8 +12,9 @@ import { useRoutines } from '../../hooks/useRoutines'
 import { useStudents } from '../../hooks/useStudents'
 import { useStudentProfile } from '../../hooks/useStudentProfile'
 import { useStudentPlan } from '../../hooks/useStudentPlan'
+import { useInvitations } from '../../hooks/useInvitations'
 import { useAuth } from '../../context/AuthContext'
-import type { Student, RoutineStatus } from '../../lib/types'
+import type { Invitation, Student, RoutineStatus } from '../../lib/types'
 
 type StudentDetailTab = 'overview' | 'profile' | 'plan'
 
@@ -22,6 +23,7 @@ export function StudentDetail() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { enableStudent, disableStudent } = useStudents()
+  const { createInvitation } = useInvitations()
   const { notes, loadingNotes, updateStudentProfile, addStudentNote } = useStudentProfile(studentId)
   const { plan, history: planHistory, loading: planLoading, savePlan } = useStudentPlan(studentId)
   const { routines, loading: routinesLoading, updateRoutineStatus, reactivateArchivedRoutine, deleteRoutine } = useRoutines(studentId)
@@ -30,6 +32,7 @@ export function StudentDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [profileForm, setProfileForm] = useState({
+    full_name: '',
     birth_date: '',
     height_cm: '',
     weight_kg: '',
@@ -51,6 +54,10 @@ export function StudentDetail() {
   const [planSaving, setPlanSaving] = useState(false)
   const [planMessage, setPlanMessage] = useState<string | null>(null)
   const [planError, setPlanError] = useState<string | null>(null)
+  const [inviteSaving, setInviteSaving] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [invitationEmail, setInvitationEmail] = useState('')
+  const [createdInvitation, setCreatedInvitation] = useState<Invitation | null>(null)
 
   const [actionType, setActionType] = useState<'enable' | 'disable' | 'activate' | 'reactivate' | 'archive' | 'delete' | null>(null)
   const [actionRoutineId, setActionRoutineId] = useState<string | null>(null)
@@ -78,6 +85,7 @@ export function StudentDetail() {
         const loadedStudent = data as Student
         setStudent(loadedStudent)
         setProfileForm({
+          full_name: loadedStudent.full_name || loadedStudent.name || '',
           birth_date: loadedStudent.birth_date || '',
           height_cm: loadedStudent.height_cm !== null && loadedStudent.height_cm !== undefined
             ? String(loadedStudent.height_cm)
@@ -87,6 +95,7 @@ export function StudentDetail() {
             : '',
           goal: loadedStudent.goal || '',
         })
+        setInvitationEmail(loadedStudent.email || '')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error al cargar alumno')
       } finally {
@@ -128,6 +137,94 @@ export function StudentDetail() {
   const handleRoutineAction = (routineId: string, type: 'activate' | 'reactivate' | 'archive' | 'delete') => {
     setActionType(type)
     setActionRoutineId(routineId)
+  }
+
+  const getAccountStatus = (studentData: Student) => {
+    if (studentData.account_status) return studentData.account_status
+    return studentData.active === false ? 'disabled' : 'active'
+  }
+
+  const getInvitationLink = (token: string) => {
+    return `${window.location.origin}/register?token=${token}`
+  }
+
+  const copyInvitationLink = (token: string) => {
+    navigator.clipboard.writeText(getInvitationLink(token))
+    setInviteError(null)
+  }
+
+  const getInvitationEmailHref = (invitation: Invitation) => {
+    const link = getInvitationLink(invitation.token)
+    const subject = encodeURIComponent('Invitación a XIM App')
+    const body = encodeURIComponent(
+      `Hola,\n\nTe invito a crear tu cuenta en XIM App desde este link:\n\n${link}\n\nSi no esperabas esta invitación, podés ignorar este correo.`
+    )
+
+    return `mailto:${invitation.email}?subject=${subject}&body=${body}`
+  }
+
+  const handleCreateLinkedInvitation = async () => {
+    if (!student) return
+
+    const email = (student.email || invitationEmail).trim().toLowerCase()
+
+    if (!email) {
+      setInviteError('Ingresá el email del alumno para generar la invitación')
+      return
+    }
+
+    setInviteSaving(true)
+    setInviteError(null)
+    setCreatedInvitation(null)
+
+    if (email !== student.email) {
+      const { data: existingProfile, error: existingError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .neq('id', student.id)
+        .maybeSingle()
+
+      if (existingError) {
+        setInviteError(existingError.message)
+        setInviteSaving(false)
+        return
+      }
+
+      if (existingProfile) {
+        setInviteError('Ya existe otro alumno o usuario con ese email')
+        setInviteSaving(false)
+        return
+      }
+
+      const { error: updateEmailError } = await supabase
+        .from('profiles')
+        .update({ email })
+        .eq('id', student.id)
+
+      if (updateEmailError) {
+        setInviteError(updateEmailError.message)
+        setInviteSaving(false)
+        return
+      }
+
+      setStudent({ ...student, email })
+    }
+
+    const { invitation, error } = await createInvitation(
+      email,
+      'consulta',
+      student.full_name || student.name || email,
+      student.id
+    )
+
+    if (error) {
+      setInviteError(error)
+    } else {
+      setCreatedInvitation(invitation)
+    }
+
+    setInviteSaving(false)
   }
 
   const handleProfileChange = (field: keyof typeof profileForm, value: string) => {
@@ -198,11 +295,11 @@ export function StudentDetail() {
       if (actionType === 'enable') {
         const { error } = await enableStudent(student.id)
         if (error) throw new Error(error)
-        setStudent({ ...student, active: true, disabled_by: null, disabled_at: null })
+        setStudent({ ...student, active: true, account_status: 'active', disabled_by: null, disabled_at: null })
       } else if (actionType === 'disable') {
         const { error } = await disableStudent(student.id, user.id)
         if (error) throw new Error(error)
-        setStudent({ ...student, active: false, disabled_by: user.id, disabled_at: new Date().toISOString() })
+        setStudent({ ...student, active: false, account_status: 'disabled', disabled_by: user.id, disabled_at: new Date().toISOString() })
       } else if (actionType === 'activate' && actionRoutineId) {
         await updateRoutineStatus(actionRoutineId, 'active')
       } else if (actionType === 'reactivate' && actionRoutineId) {
@@ -264,7 +361,7 @@ export function StudentDetail() {
   }
 
   const getActionMessage = () => {
-    const studentName = student?.full_name || student?.name || student?.email
+    const studentName = student?.full_name || student?.name || student?.email || 'este alumno'
     if (actionType === 'enable') {
       return `¿Estás segura de habilitar a "${studentName}"?`
     }
@@ -326,13 +423,32 @@ export function StudentDetail() {
               <span>Alumno</span>
             </div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {student.full_name || student.name || student.email}
+              {student.full_name || student.name || student.email || 'Alumno sin nombre'}
+              {student.id === user?.id && (
+                <span className="ml-2 align-middle inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                  Vos · Entrenadora
+                </span>
+              )}
             </h1>
-            {(student.full_name || student.name) && (
+            {(student.full_name || student.name) && student.email && (
               <p className="text-sm text-gray-500">{student.email}</p>
+            )}
+            {getAccountStatus(student) === 'pending' && (
+              <p className="mt-1 text-sm text-yellow-700">
+                Alumno pendiente: todavía no tiene cuenta de acceso.
+              </p>
             )}
           </div>
           <div className="flex items-center gap-3">
+            {getAccountStatus(student) === 'pending' && (
+              <Button
+                variant="secondary"
+                onClick={handleCreateLinkedInvitation}
+                disabled={inviteSaving}
+              >
+                {inviteSaving ? 'Creando...' : 'Enviar invitación'}
+              </Button>
+            )}
             <Link to={`/admin/students/${student.id}/register-workout`}>
               <Button variant="secondary">
                 Registrar entrenamiento
@@ -353,6 +469,67 @@ export function StudentDetail() {
             )}
           </div>
         </div>
+
+        {(createdInvitation || inviteError) && (
+          <div className={`rounded-lg border p-4 ${
+            createdInvitation
+              ? 'border-green-200 bg-green-50'
+              : 'border-red-200 bg-red-50'
+          }`}>
+            {inviteError && (
+              <p className="text-sm text-red-700">{inviteError}</p>
+            )}
+            {createdInvitation && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-green-800">
+                  Invitación creada. Enviá este link al alumno para que complete su registro.
+                </p>
+                <div className="break-all rounded-lg border border-green-200 bg-white px-3 py-2 text-sm text-gray-700">
+                  {getInvitationLink(createdInvitation.token)}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => copyInvitationLink(createdInvitation.token)}
+                  >
+                    Copiar link
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      window.location.href = getInvitationEmailHref(createdInvitation)
+                    }}
+                  >
+                    Abrir email
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {getAccountStatus(student) === 'pending' && !student.email && !createdInvitation && (
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+            <div className="max-w-md space-y-3">
+              <Input
+                label="Email para invitación"
+                type="email"
+                value={invitationEmail}
+                onChange={(e) => {
+                  setInvitationEmail(e.target.value)
+                  setInviteError(null)
+                }}
+                placeholder="usuario@email.com"
+              />
+              <p className="text-xs text-yellow-800">
+                El email se guarda al generar la invitación y se usa para vincular la cuenta cuando el alumno se registra.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Student Info Card */}
         <div className="border-b border-gray-200">
@@ -382,7 +559,16 @@ export function StudentDetail() {
           </div>
           <div className="p-6 space-y-6">
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Datos físicos y objetivo</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-4">Datos del alumno</h3>
+              <div className="mb-4">
+                <Input
+                  label="Nombre"
+                  value={profileForm.full_name}
+                  onChange={(e) => handleProfileChange('full_name', e.target.value)}
+                  required
+                  placeholder="Nombre del alumno"
+                />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Input
                   label="Fecha de nacimiento"
@@ -603,7 +789,9 @@ export function StudentDetail() {
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-gray-600">Estado:</span>
-                {student.active !== false ? (
+                {getAccountStatus(student) === 'pending' ? (
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Pendiente</span>
+                ) : getAccountStatus(student) === 'active' ? (
                   <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Activo</span>
                 ) : (
                   <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Inhabilitado</span>

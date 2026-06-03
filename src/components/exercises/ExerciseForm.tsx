@@ -112,11 +112,11 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, 
     e.preventDefault()
 
     await onSubmit({
-      name,
+      name: name.trim(),
       movement_pattern_id: movementPatternId,
       direction_id: directionId,
-      chain_type: chainType as ChainType | null,
-      execution_tips: executionTips,
+      chain_type: chainType === '' ? null : chainType,
+      execution_tips: executionTips.trim(),
       primary_muscle_ids: primaryMuscleIds,
       synergist_muscle_ids: synergistMuscleIds,
       videos: videos.filter((v) => v.url.trim()),
