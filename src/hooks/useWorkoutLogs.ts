@@ -7,6 +7,7 @@ export interface CreateWorkoutLogData {
   routine_day_id: string
   week_number: number
   student_note?: string
+  is_extra?: boolean
   logged_sets: CreateLoggedSetData[]
   exercise_notes?: CreateWorkoutExerciseNoteData[]
 }
@@ -147,6 +148,7 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
           routine_day_id: data.routine_day_id,
           week_number: data.week_number,
           student_note: data.student_note || null,
+          is_extra: data.is_extra || false,
           registered_by: registeredBy || studentId,
         })
         .select()
@@ -223,7 +225,11 @@ export function useWorkoutLogs(studentId?: string, routineId?: string) {
 
   // Contar entrenamientos completados por semana
   const countLogsByWeek = (weekNumber: number): number => {
-    return logs.filter(log => log.week_number === weekNumber).length
+    return new Set(
+      logs
+        .filter(log => log.week_number === weekNumber && !log.is_extra)
+        .map(log => log.routine_day_id)
+    ).size
   }
 
   // Obtener logs de una semana específica

@@ -131,6 +131,11 @@ export function StudentProgress({ studentId }: StudentProgressProps) {
                       <span className="px-2 py-0.5 bg-gray-200 rounded text-xs text-gray-600">
                         Sem. {log.week_number}
                       </span>
+                      {log.is_extra && (
+                        <span className="px-2 py-0.5 bg-amber-50 rounded text-xs text-amber-800">
+                          Extra
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-gray-500 mt-0.5">
                       {formatDate(log.completed_at)} a las {formatTime(log.completed_at)}

@@ -187,14 +187,14 @@ function ComparisonView({ day, currentWeek, lastLog }: ComparisonViewProps) {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 text-center text-sm border-b border-gray-200 pb-3">
         <div>
-          <p className="text-gray-500">Última vez</p>
+          <p className="text-gray-500">Referencia anterior</p>
           <p className="font-medium text-gray-900">
-            {lastLogDate.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} — Semana {lastLog.week_number}
+            Día {day.day_number} · {lastLogDate.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} · Sem. {lastLog.week_number}
           </p>
         </div>
         <div>
-          <p className="text-gray-500">Hoy</p>
-          <p className="font-medium text-gray-900">Semana {currentWeek}</p>
+          <p className="text-gray-500">Entrenamiento de hoy</p>
+          <p className="font-medium text-gray-900">Día {day.day_number} · Sem. {currentWeek}</p>
         </div>
       </div>
 

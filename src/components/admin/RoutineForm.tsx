@@ -893,6 +893,16 @@ export function RoutineForm({
                   </div>
                   )
                 })}
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => addBlock(dayIndex)}
+                    >
+                      + Agregar bloque
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
