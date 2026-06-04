@@ -89,6 +89,18 @@ const isWeekEmpty = (week: FormWeekSets) => {
   return week.sets.every(set => set.set_type === 'reps' && set.quantity === 8 && set.weight_kg.trim() === '')
 }
 
+const formatSet = (set: FormSet) => {
+  const quantity = set.set_type === 'time' ? `${set.quantity}"` : `${set.quantity} reps`
+  const weight = set.weight_kg.trim() ? ` / ${set.weight_kg.trim()}kg` : ''
+  return `${quantity}${weight}`
+}
+
+const areSetsEqual = (a: FormSet, b: FormSet) => (
+  a.set_type === b.set_type &&
+  a.quantity === b.quantity &&
+  a.weight_kg.trim() === b.weight_kg.trim()
+)
+
 export function RoutineForm({
   initialData,
   studentId,
@@ -127,6 +139,7 @@ export function RoutineForm({
   const [currentBlockIndex, setCurrentBlockIndex] = useState<number | null>(null)
   const [exerciseSearch, setExerciseSearch] = useState('')
   const [selectedWeekByExerciseId, setSelectedWeekByExerciseId] = useState<Record<string, number>>({})
+  const [expandedProgressionIds, setExpandedProgressionIds] = useState<Set<string>>(new Set())
   const [collapsedDayIds, setCollapsedDayIds] = useState<Set<string>>(() => {
     const initialDays = initialData?.days || []
     return new Set(initialDays.slice(0, -1).map(day => day.id))
@@ -171,6 +184,18 @@ export function RoutineForm({
 
   const setSelectedWeek = (exerciseId: string, week: number) => {
     setSelectedWeekByExerciseId(prev => ({ ...prev, [exerciseId]: week }))
+  }
+
+  const toggleProgression = (exerciseId: string) => {
+    setExpandedProgressionIds(prev => {
+      const next = new Set(prev)
+      if (next.has(exerciseId)) {
+        next.delete(exerciseId)
+      } else {
+        next.add(exerciseId)
+      }
+      return next
+    })
   }
 
   // Cambiar total de semanas - ajusta los sets de todos los ejercicios
@@ -472,6 +497,98 @@ export function RoutineForm({
                     return {
                       ...w,
                       sets: w.sets.filter((_, si) => si !== setIndex),
+                    }
+                  }),
+                }
+              }),
+            }
+          }),
+        }
+      }),
+    }))
+  }
+
+  const copySetFromPrevious = (
+    dayIndex: number,
+    blockIndex: number,
+    exerciseIndex: number,
+    weekIndex: number,
+    setIndex: number
+  ) => {
+    if (setIndex === 0) return
+
+    setFormData(prev => ({
+      ...prev,
+      days: prev.days.map((d, di) => {
+        if (di !== dayIndex) return d
+        return {
+          ...d,
+          blocks: d.blocks.map((b, bi) => {
+            if (bi !== blockIndex) return b
+            return {
+              ...b,
+              exercises: b.exercises.map((e, ei) => {
+                if (ei !== exerciseIndex) return e
+                return {
+                  ...e,
+                  weeks: e.weeks.map((w, wi) => {
+                    if (wi !== weekIndex) return w
+                    const sourceSet = w.sets[setIndex - 1]
+                    if (!sourceSet) return w
+                    return {
+                      ...w,
+                      sets: w.sets.map((set, si) => (
+                        si === setIndex
+                          ? {
+                              ...set,
+                              set_type: sourceSet.set_type,
+                              quantity: sourceSet.quantity,
+                              weight_kg: sourceSet.weight_kg,
+                            }
+                          : set
+                      )),
+                    }
+                  }),
+                }
+              }),
+            }
+          }),
+        }
+      }),
+    }))
+  }
+
+  const equalizeWeekSets = (dayIndex: number, blockIndex: number, exerciseIndex: number, weekIndex: number) => {
+    setFormData(prev => ({
+      ...prev,
+      days: prev.days.map((d, di) => {
+        if (di !== dayIndex) return d
+        return {
+          ...d,
+          blocks: d.blocks.map((b, bi) => {
+            if (bi !== blockIndex) return b
+            return {
+              ...b,
+              exercises: b.exercises.map((e, ei) => {
+                if (ei !== exerciseIndex) return e
+                return {
+                  ...e,
+                  weeks: e.weeks.map((w, wi) => {
+                    if (wi !== weekIndex) return w
+                    const firstSet = w.sets[0]
+                    if (!firstSet || w.sets.length <= 1) return w
+                    return {
+                      ...w,
+                      sets: w.sets.map((set, si) => (
+                        si === 0
+                          ? set
+                          : {
+                              ...set,
+                              set_type: firstSet.set_type,
+                              quantity: firstSet.quantity,
+                              weight_kg: firstSet.weight_kg,
+                            }
+                      )),
                     }
                   }),
                 }
@@ -791,23 +908,42 @@ export function RoutineForm({
                                 className="mb-3 text-sm"
                               />
 
-                              <div className="mb-3 overflow-x-auto">
-                                <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
-                                  {exercise.weeks.map(week => (
-                                    <button
-                                      key={week.week_number}
-                                      type="button"
-                                      onClick={() => setSelectedWeek(exercise.id, week.week_number)}
-                                      className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap ${
-                                        selectedWeek === week.week_number
-                                          ? 'bg-white text-gray-900 shadow-sm'
-                                          : 'text-gray-500 hover:text-gray-700'
-                                      }`}
-                                    >
-                                      Sem {week.week_number}
-                                    </button>
-                                  ))}
+                              <div className="mb-3 space-y-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="inline-flex overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-1">
+                                    {exercise.weeks.map(week => (
+                                      <button
+                                        key={week.week_number}
+                                        type="button"
+                                        onClick={() => setSelectedWeek(exercise.id, week.week_number)}
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap ${
+                                          selectedWeek === week.week_number
+                                            ? 'bg-white text-gray-900 shadow-sm'
+                                            : 'text-gray-500 hover:text-gray-700'
+                                        }`}
+                                      >
+                                        Sem {week.week_number}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-xs"
+                                    onClick={() => toggleProgression(exercise.id)}
+                                    disabled={!exercise.weeks.some(week => !isWeekEmpty(week))}
+                                  >
+                                    {expandedProgressionIds.has(exercise.id) ? 'Ocultar progresión' : 'Ver progresión'}
+                                  </Button>
                                 </div>
+
+                                {expandedProgressionIds.has(exercise.id) && (
+                                  <ExerciseProgressionPanel
+                                    exercise={exercise}
+                                    onClose={() => toggleProgression(exercise.id)}
+                                  />
+                                )}
                               </div>
 
                               {/* Series de la semana seleccionada */}
@@ -837,6 +973,15 @@ export function RoutineForm({
                                         Replicar Semana 1 en el resto
                                       </Button>
                                     )}
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-xs"
+                                      disabled={selectedWeekSets.length <= 1}
+                                      onClick={() => equalizeWeekSets(dayIndex, blockIndex, exerciseIndex, selectedWeekIndex)}
+                                    >
+                                      Igualar todas
+                                    </Button>
                                     <Button
                                       size="sm"
                                       variant="ghost"
@@ -872,6 +1017,18 @@ export function RoutineForm({
                                       placeholder="kg"
                                       className="w-20"
                                     />
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="px-2 text-xs"
+                                      disabled={setIndex === 0}
+                                      onClick={() => copySetFromPrevious(dayIndex, blockIndex, exerciseIndex, selectedWeekIndex, setIndex)}
+                                      aria-label={`Copiar valores de serie ${setIndex}`}
+                                      title="Copiar de serie anterior"
+                                    >
+                                      ↑
+                                    </Button>
                                     {selectedWeekSets.length > 1 && (
                                       <Button
                                         size="sm"
@@ -986,6 +1143,85 @@ export function RoutineForm({
           </div>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+interface ExerciseProgressionPanelProps {
+  exercise: FormExercise
+  onClose: () => void
+}
+
+function ExerciseProgressionPanel({ exercise, onClose }: ExerciseProgressionPanelProps) {
+  const weeksWithData = exercise.weeks.filter(week => !isWeekEmpty(week))
+
+  if (weeksWithData.length === 0) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-500">
+        No hay semanas con datos cargados.
+      </div>
+    )
+  }
+
+  const weekSummaries = weeksWithData.map(week => {
+    const firstSet = week.sets[0]
+    const allSetsEqual = Boolean(firstSet) && week.sets.every(set => areSetsEqual(set, firstSet))
+
+    return {
+      week,
+      allSetsEqual,
+      compactLabel: firstSet ? `${week.sets.length}×${formatSet(firstSet)}` : '—',
+    }
+  })
+
+  const allWeeksCompact = weekSummaries.every(summary => summary.allSetsEqual)
+  const maxSetCount = Math.max(...weekSummaries.map(summary => summary.week.sets.length))
+  const rowCount = allWeeksCompact ? 1 : maxSetCount
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h5 className="text-sm font-semibold text-gray-800">Progresión completa</h5>
+        <Button type="button" size="sm" variant="ghost" className="text-xs" onClick={onClose}>
+          Cerrar
+        </Button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-gray-500">
+              <th className="w-24 px-2 py-1 font-medium">{allWeeksCompact ? 'Resumen' : 'Serie'}</th>
+              {weekSummaries.map(({ week }) => (
+                <th key={week.week_number} className="min-w-32 px-2 py-1 font-medium">
+                  Sem {week.week_number}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: rowCount }, (_, rowIndex) => (
+              <tr key={rowIndex} className="border-t border-gray-200">
+                <td className="px-2 py-2 text-xs font-medium text-gray-500">
+                  {allWeeksCompact ? 'Todas' : `Serie ${rowIndex + 1}`}
+                </td>
+                {weekSummaries.map(summary => {
+                  const set = summary.week.sets[rowIndex]
+                  const value = summary.allSetsEqual
+                    ? rowIndex === 0 ? summary.compactLabel : '—'
+                    : set ? formatSet(set) : '—'
+
+                  return (
+                    <td key={summary.week.week_number} className="px-2 py-2 text-gray-800">
+                      {value}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
