@@ -5,6 +5,7 @@ import { Select } from '../ui/Select'
 import { Modal } from '../ui/Modal'
 import { useStudents } from '../../hooks/useStudents'
 import { useExercises } from '../../hooks/useExercises'
+import { getBlockColor } from '../../lib/blockColors'
 import type { Exercise, SetType } from '../../lib/types'
 
 // Tipos internos para el formulario
@@ -718,9 +719,12 @@ export function RoutineForm({
               {/* Bloques */}
               {!isCollapsed && (
                 <div className="p-4 space-y-4">
-                {day.blocks.map((block, blockIndex) => (
-                  <div key={block.id} className="border border-gray-200 rounded-lg">
-                    <div className="bg-gray-100 px-3 py-2 flex items-center justify-between rounded-t-lg">
+                {day.blocks.map((block, blockIndex) => {
+                  const blockColor = getBlockColor(block.block_letter)
+
+                  return (
+                  <div key={block.id} className={`border ${blockColor.border} ${blockColor.bg} rounded-lg`}>
+                    <div className="px-3 py-2 flex items-center justify-between rounded-t-lg">
                       <span className="font-medium text-gray-700">Bloque {block.block_letter}</span>
                       <div className="flex items-center gap-2">
                         <Button
@@ -887,7 +891,8 @@ export function RoutineForm({
                       )}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
                 </div>
               )}
             </div>

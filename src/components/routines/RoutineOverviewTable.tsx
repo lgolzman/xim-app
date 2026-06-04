@@ -1,3 +1,4 @@
+import { getBlockColor } from '../../lib/blockColors'
 import type { PrescribedSet, RoutineWithDays } from '../../lib/types'
 
 interface RoutineOverviewTableProps {
@@ -32,8 +33,9 @@ export function RoutineOverviewTable({ routine }: RoutineOverviewTableProps) {
               </thead>
               <tbody>
                 {day.routine_blocks.flatMap(block => {
+                  const blockColor = getBlockColor(block.block_letter)
                   const blockRows = block.block_exercises.map(exercise => (
-                    <tr key={exercise.id} className="border-b border-gray-100 last:border-b-0">
+                    <tr key={exercise.id} className={`${blockColor.bg} border-b ${blockColor.border} last:border-b-0`}>
                       <td className="px-3 py-3 align-top">
                         <div className="flex gap-3">
                           <span className="min-w-8 shrink-0 font-semibold text-gray-500">
@@ -61,7 +63,7 @@ export function RoutineOverviewTable({ routine }: RoutineOverviewTableProps) {
                   ))
 
                   return [
-                    <tr key={block.id} className="bg-gray-100">
+                    <tr key={block.id} className={`${blockColor.bg} border-b ${blockColor.border}`}>
                       <td colSpan={weekNumbers.length + 2} className="px-3 py-2">
                         <span className="font-semibold text-gray-900">Bloque {block.block_letter}</span>
                         {block.block_exercises.length > 1 && (
