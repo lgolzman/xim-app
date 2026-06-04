@@ -200,6 +200,7 @@ export interface WorkoutLog {
   week_number: number
   completed_at: string
   student_note: string | null
+  is_extra: boolean
 }
 
 export interface LoggedSet {

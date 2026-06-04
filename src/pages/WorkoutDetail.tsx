@@ -132,6 +132,11 @@ export function WorkoutDetail() {
             <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
               Semana {log.week_number}
             </span>
+            {log.is_extra && (
+              <span className="px-2 py-0.5 bg-amber-50 rounded text-xs text-amber-800">
+                Fuera de secuencia
+              </span>
+            )}
             {log.registered_by && log.registered_by !== log.student_id && (
               <span className="px-2 py-0.5 bg-blue-50 rounded text-xs text-blue-700">
                 Registrado por entrenadora

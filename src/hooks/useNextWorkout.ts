@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useActiveRoutine } from './useActiveRoutine'
 import { useWorkoutLogs } from './useWorkoutLogs'
 import type { RoutineDayWithBlocks, WorkoutLogWithDetails } from '../lib/types'
@@ -32,8 +32,6 @@ export function useNextWorkout(studentId: string | undefined) {
   const { routine, loading: routineLoading, error: routineError } = useActiveRoutine(studentId)
   const { logs, loading: logsLoading, error: logsError } = useWorkoutLogs(studentId, routine?.id)
 
-  const [info, setInfo] = useState<NextWorkoutInfo | null>(null)
-
   const loading = routineLoading || logsLoading
   const error = routineError || logsError
 
@@ -61,13 +59,17 @@ export function useNextWorkout(studentId: string | undefined) {
     const totalWeeks = routine.total_weeks
     const sortedDays = [...routine.routine_days].sort((a, b) => a.day_number - b.day_number)
 
-    // Obtener el último log (logs ya viene ordenado por completed_at DESC)
+    const progressionLogs = logs.filter(log => !log.is_extra)
+
+    // Obtener el último log real (logs ya viene ordenado por completed_at DESC)
     const lastLog = logs.length > 0 ? logs[0] : null
     const lastLogDate = lastLog ? new Date(lastLog.completed_at) : null
     const lastLogDayNumber = lastLog ? lastLog.routine_day.day_number : null
+    const lastProgressionLog = progressionLogs.length > 0 ? progressionLogs[0] : null
+    const lastProgressionLogDayNumber = lastProgressionLog ? lastProgressionLog.routine_day.day_number : null
 
-    // Si no hay logs, es el primer entrenamiento
-    if (!lastLog) {
+    // Si no hay logs de progresion, el proximo sugerido sigue siendo el primer dia.
+    if (!lastProgressionLog) {
       const firstDay = sortedDays[0] || null
       return {
         hasActiveRoutine: true,
@@ -77,36 +79,24 @@ export function useNextWorkout(studentId: string | undefined) {
         currentWeek: 1,
         suggestedDay: firstDay,
         suggestedDayNumber: 1,
-        lastLog: null,
-        lastLogDate: null,
-        lastLogDayNumber: null,
+        lastLog,
+        lastLogDate,
+        lastLogDayNumber,
         lastLogForSuggestedDay: null,
-        isFirstWorkout: true,
+        isFirstWorkout: logs.length === 0,
         isNewWeek: false,
       }
     }
 
-    // Calcular la semana actual basándose en los logs completados
-    // La semana avanza cuando se completan todos los días de esa semana
-    // Contar cuántos días distintos se han completado en cada semana
-    const logsByWeek = new Map<number, Set<string>>()
-
-    logs.forEach(log => {
-      if (!logsByWeek.has(log.week_number)) {
-        logsByWeek.set(log.week_number, new Set())
-      }
-      logsByWeek.get(log.week_number)!.add(log.routine_day_id)
-    })
-
-    // La semana actual es la del último log
-    let currentWeek = lastLog.week_number
+    // La semana actual es la del ultimo log que avanzo la secuencia
+    let currentWeek = lastProgressionLog.week_number
 
     // Determinar el siguiente día
     let suggestedDayNumber: number
     let isNewWeek = false
 
-    if (lastLogDayNumber !== null) {
-      if (lastLogDayNumber >= totalDays) {
+    if (lastProgressionLogDayNumber !== null) {
+      if (lastProgressionLogDayNumber >= totalDays) {
         // Completó el último día, pasar a semana siguiente (si hay)
         if (currentWeek < totalWeeks) {
           suggestedDayNumber = 1
@@ -119,7 +109,7 @@ export function useNextWorkout(studentId: string | undefined) {
         }
       } else {
         // Siguiente día de la misma semana
-        suggestedDayNumber = lastLogDayNumber + 1
+        suggestedDayNumber = lastProgressionLogDayNumber + 1
       }
     } else {
       suggestedDayNumber = 1
@@ -149,11 +139,7 @@ export function useNextWorkout(studentId: string | undefined) {
     }
   }, [routine, logs])
 
-  useEffect(() => {
-    if (!loading) {
-      setInfo(nextWorkoutInfo)
-    }
-  }, [loading, nextWorkoutInfo])
+  const info = loading ? null : nextWorkoutInfo
 
   // Función helper para obtener el log anterior de cualquier día
   const getLastLogForDayNumber = (dayNumber: number): WorkoutLogWithDetails | null => {

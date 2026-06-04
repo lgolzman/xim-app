@@ -220,6 +220,11 @@ export function AdminWorkoutDetail() {
             <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
               Semana {log.week_number}
             </span>
+            {log.is_extra && (
+              <span className="px-2 py-0.5 bg-amber-50 rounded text-xs text-amber-800">
+                Fuera de secuencia
+              </span>
+            )}
           </div>
         </div>
 

@@ -37,8 +37,10 @@ export function WorkoutExecution() {
   const { routine, loading: routineLoading } = useActiveRoutine(targetStudentId)
   const { logs, createWorkoutLog } = useWorkoutLogs(targetStudentId, routine?.id)
   const { exercises } = useExercises()
-  const activeDayId = dayId || nextWorkoutInfo?.suggestedDay?.id
+  const selectedAdminDayId = searchParams.get('day')
+  const activeDayId = dayId || selectedAdminDayId || nextWorkoutInfo?.suggestedDay?.id
   const weekNumber = parseInt(searchParams.get('week') || String(nextWorkoutInfo?.currentWeek || 1))
+  const shouldShowAdminDaySelector = isAdminProxy && !dayId && !selectedAdminDayId
 
   const [day, setDay] = useState<RoutineDayWithBlocks | null>(null)
   const [setInputs, setSetInputs] = useState<SetInput[]>([])
@@ -281,6 +283,7 @@ export function WorkoutExecution() {
         routine_day_id: day.id,
         week_number: weekNumber,
         student_note: studentNote || undefined,
+        is_extra: nextWorkoutInfo?.suggestedDay?.id !== day.id,
         logged_sets: loggedSets,
         exercise_notes: exerciseNotesToSave,
       }, targetStudentId, user.id)
@@ -302,6 +305,11 @@ export function WorkoutExecution() {
     navigate(-1)
   }
 
+  const handleAdminSelectDay = (selectedDayId: string) => {
+    if (!studentId) return
+    navigate(`/admin/students/${studentId}/register-workout?day=${selectedDayId}`)
+  }
+
   if (routineLoading || nextWorkoutLoading) {
     return (
       <Layout>
@@ -312,13 +320,97 @@ export function WorkoutExecution() {
     )
   }
 
-  if (!routine || !day) {
+  if (!routine || !nextWorkoutInfo?.hasActiveRoutine) {
     return (
       <Layout>
         <div className="text-center py-12">
           <p className="text-red-600 mb-4">No se encontró el día de entrenamiento</p>
           <Link to="/">
             <Button variant="secondary">Volver al inicio</Button>
+          </Link>
+        </div>
+      </Layout>
+    )
+  }
+
+  if (shouldShowAdminDaySelector) {
+    const availableDays = [...routine.routine_days].sort((a, b) => a.day_number - b.day_number)
+
+    return (
+      <Layout>
+        <div className="space-y-6">
+          <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h1 className="text-2xl font-bold text-gray-900">{routine.name}</h1>
+              <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
+                Semana {nextWorkoutInfo.currentWeek} de {routine.total_weeks}
+              </span>
+            </div>
+            <p className="text-gray-600">
+              Elegí qué día registrar para este alumno. Si registrás un día distinto al sugerido,
+              queda en el historial sin avanzar la secuencia.
+            </p>
+          </div>
+
+          {nextWorkoutInfo.suggestedDay && (
+            <div className="bg-gray-900 text-white rounded-lg px-6 py-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-400">Día sugerido</p>
+                  <h2 className="text-xl font-bold">
+                    Día {nextWorkoutInfo.suggestedDayNumber}
+                    {nextWorkoutInfo.suggestedDay.name && ` — ${nextWorkoutInfo.suggestedDay.name}`}
+                  </h2>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="border-transparent shadow-sm hover:bg-gray-100"
+                  onClick={() => handleAdminSelectDay(nextWorkoutInfo.suggestedDay!.id)}
+                >
+                  Registrar sugerido
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <h2 className="text-sm font-medium text-gray-700 mb-3">Todos los días de la rutina</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {availableDays.map(availableDay => {
+                const isSuggested = nextWorkoutInfo.suggestedDay?.id === availableDay.id
+
+                return (
+                  <button
+                    key={availableDay.id}
+                    type="button"
+                    onClick={() => handleAdminSelectDay(availableDay.id)}
+                    className={`p-3 rounded-lg border text-left text-sm font-medium transition-colors ${
+                      isSuggested
+                        ? 'bg-gray-100 text-gray-900 border-gray-300'
+                        : 'bg-white border-gray-200 hover:border-gray-400 text-gray-700'
+                    }`}
+                  >
+                    Día {availableDay.day_number}
+                    {isSuggested && <span className="ml-2 text-xs text-gray-500">sugerido</span>}
+                    {availableDay.name && <span className="block text-xs text-gray-500 mt-1">{availableDay.name}</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
+
+  if (!day) {
+    return (
+      <Layout>
+        <div className="text-center py-12">
+          <p className="text-red-600 mb-4">No se encontró el día de entrenamiento</p>
+          <Link to={isAdminProxy && studentId ? `/admin/students/${studentId}` : '/'}>
+            <Button variant="secondary">Volver</Button>
           </Link>
         </div>
       </Layout>
