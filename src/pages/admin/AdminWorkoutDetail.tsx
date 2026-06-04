@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useLocation, useNavigate, useParams, Link } from 'react-router-dom'
 import { Layout } from '../../components/layout/Layout'
 import { Button } from '../../components/ui/Button'
+import { getBlockColor } from '../../lib/blockColors'
 import { supabase } from '../../lib/supabase'
 import { useRoutines } from '../../hooks/useRoutines'
 import type { WorkoutExerciseNote, WorkoutLogWithDetails, RoutineDayWithBlocks, LoggedSet, PrescribedSet, Student } from '../../lib/types'
@@ -249,9 +250,12 @@ export function AdminWorkoutDetail() {
         {/* Ejercicios y series */}
         {day ? (
           <div className="space-y-6">
-            {day.routine_blocks.map(block => (
-              <div key={block.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <div className="bg-gray-100 px-4 py-2 flex items-center gap-2">
+            {day.routine_blocks.map(block => {
+              const blockColor = getBlockColor(block.block_letter)
+
+              return (
+              <div key={block.id} className={`${blockColor.bg} border ${blockColor.border} rounded-lg overflow-hidden`}>
+                <div className="px-4 py-2 flex items-center gap-2">
                   <span className="font-semibold text-gray-900">Bloque {block.block_letter}</span>
                   {block.block_exercises.length > 1 && (
                     <span className="text-xs px-2 py-0.5 bg-gray-200 rounded text-gray-600">superset</span>
@@ -321,7 +325,8 @@ export function AdminWorkoutDetail() {
                   })}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         ) : (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">

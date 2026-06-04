@@ -4,12 +4,13 @@ import { Layout } from '../components/layout/Layout'
 import { Button } from '../components/ui/Button'
 import { useAuth } from '../context/AuthContext'
 import { useNextWorkout } from '../hooks/useNextWorkout'
+import { getBlockColor } from '../lib/blockColors'
 import type { RoutineDayWithBlocks, PrescribedSet, LoggedSet } from '../lib/types'
 
 export function StudentHome() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { info, loading, routine, getAvailableDays } = useNextWorkout(user?.id)
+  const { info, loading, getAvailableDays } = useNextWorkout(user?.id)
 
   const [showDaySelector, setShowDaySelector] = useState(false)
 
@@ -109,7 +110,6 @@ export function StudentHome() {
                   day={info.suggestedDay}
                   currentWeek={info.currentWeek}
                   lastLog={info.lastLogForSuggestedDay}
-                  routine={routine}
                 />
               ) : (
                 <p className="text-gray-500 text-center py-4">
@@ -171,7 +171,6 @@ interface ComparisonViewProps {
     completed_at: string
     logged_sets: LoggedSet[]
   }
-  routine: any
 }
 
 function ComparisonView({ day, currentWeek, lastLog }: ComparisonViewProps) {
@@ -199,8 +198,11 @@ function ComparisonView({ day, currentWeek, lastLog }: ComparisonViewProps) {
         </div>
       </div>
 
-      {day.routine_blocks.map(block => (
-        <div key={block.id} className="space-y-3">
+      {day.routine_blocks.map(block => {
+        const blockColor = getBlockColor(block.block_letter)
+
+        return (
+        <div key={block.id} className={`${blockColor.bg} border ${blockColor.border} rounded-lg p-3 space-y-3`}>
           <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
             Bloque {block.block_letter}
             {block.block_exercises.length > 1 && (
@@ -264,7 +266,8 @@ function ComparisonView({ day, currentWeek, lastLog }: ComparisonViewProps) {
             )
           })}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

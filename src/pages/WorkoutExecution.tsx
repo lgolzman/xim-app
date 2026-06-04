@@ -10,6 +10,7 @@ import { useActiveRoutine } from '../hooks/useActiveRoutine'
 import { useWorkoutLogs } from '../hooks/useWorkoutLogs'
 import { useExercises } from '../hooks/useExercises'
 import { useNextWorkout } from '../hooks/useNextWorkout'
+import { getBlockColor } from '../lib/blockColors'
 import type { CreateLoggedSetData } from '../hooks/useWorkoutLogs'
 import type { BlockExerciseWithDetails, ExerciseWithRelations, LoggedSet, RoutineDayWithBlocks } from '../lib/types'
 
@@ -361,18 +362,17 @@ export function WorkoutExecution() {
           {day.routine_blocks.map(block => {
             const isExpanded = expandedBlockIds.has(block.id)
             const isCompleted = completedBlockIds.has(block.id)
+            const blockColor = getBlockColor(block.block_letter)
 
             return (
               <div
                 key={block.id}
-                className={`bg-white border rounded-lg overflow-hidden ${
-                  isCompleted ? 'border-green-200' : 'border-gray-200'
+                className={`${blockColor.bg} border ${blockColor.border} rounded-lg overflow-hidden ${
+                  isCompleted ? 'ring-2 ring-green-200' : ''
                 }`}
               >
                 <div
-                  className={`px-4 py-3 flex items-center justify-between gap-3 cursor-pointer ${
-                    isCompleted ? 'bg-green-50' : 'bg-gray-100'
-                  }`}
+                  className="px-4 py-3 flex items-center justify-between gap-3 cursor-pointer"
                   role="button"
                   tabIndex={0}
                   aria-expanded={isExpanded}
