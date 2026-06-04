@@ -4,6 +4,7 @@ import { Layout } from '../components/layout/Layout'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Modal } from '../components/ui/Modal'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { ExerciseDetail } from '../components/exercises/ExerciseDetail'
 import { useAuth } from '../context/AuthContext'
 import { useActiveRoutine } from '../hooks/useActiveRoutine'
@@ -53,6 +54,7 @@ export function WorkoutExecution() {
   const [selectedExercise, setSelectedExercise] = useState<ExerciseWithRelations | null>(null)
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false)
   const [exerciseModalSection, setExerciseModalSection] = useState<'photos' | undefined>(undefined)
+  const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -244,10 +246,15 @@ export function WorkoutExecution() {
     setExerciseModalOpen(true)
   }
 
-  const handleComplete = async () => {
+  const handleCompleteClick = () => {
+    setConfirmCompleteOpen(true)
+  }
+
+  const handleConfirmComplete = async () => {
     if (!routine || !day || !user || !targetStudentId) return
 
     setSaving(true)
+    setConfirmCompleteOpen(false)
     setError(null)
 
     try {
@@ -733,7 +740,7 @@ export function WorkoutExecution() {
         {/* Botón de completar */}
         <div className="sticky bottom-4">
           <Button
-            onClick={handleComplete}
+            onClick={handleCompleteClick}
             disabled={saving}
             className="w-full py-4 text-lg font-semibold"
           >
@@ -765,6 +772,18 @@ export function WorkoutExecution() {
           />
         )}
       </Modal>
+
+      <ConfirmDialog
+        isOpen={confirmCompleteOpen}
+        onClose={() => setConfirmCompleteOpen(false)}
+        onConfirm={handleConfirmComplete}
+        title="Finalizar entrenamiento"
+        message="¿Confirmás que querés finalizar y guardar este entrenamiento? Una vez registrado, no se puede reabrir ni modificar desde la app."
+        confirmText="Sí, finalizar"
+        cancelText="Seguir registrando"
+        variant="primary"
+        loading={saving}
+      />
     </Layout>
   )
 }
