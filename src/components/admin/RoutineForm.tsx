@@ -5,8 +5,11 @@ import { Select } from '../ui/Select'
 import { Modal } from '../ui/Modal'
 import { useStudents } from '../../hooks/useStudents'
 import { useExercises } from '../../hooks/useExercises'
+import { useMovementPatterns } from '../../hooks/useMovementPatterns'
+import { useDirections } from '../../hooks/useDirections'
 import { getBlockColor } from '../../lib/blockColors'
-import type { Exercise, SetType } from '../../lib/types'
+import { supabase } from '../../lib/supabase'
+import type { ChainType, Exercise, LoggedSet, PrescribedSet, SetType } from '../../lib/types'
 
 // Tipos internos para el formulario
 interface FormSet {
@@ -49,6 +52,30 @@ interface FormData {
   name: string
   total_weeks: number
   days: FormDay[]
+}
+
+interface LastExerciseExecution {
+  completed_at: string
+  routine_name: string
+  week_number: number
+  prescribed: string
+  registered: string
+}
+
+interface ExerciseHistoryRow {
+  completed_at: string
+  week_number: number
+  routine: { name: string } | null
+  logged_sets: LoggedSet[]
+  routine_day: {
+    routine_blocks: Array<{
+      block_exercises: Array<{
+        id: string
+        exercise_id: string
+        prescribed_sets: PrescribedSet[]
+      }>
+    }>
+  } | null
 }
 
 interface RoutineFormProps {
@@ -101,6 +128,55 @@ const areSetsEqual = (a: FormSet, b: FormSet) => (
   a.weight_kg.trim() === b.weight_kg.trim()
 )
 
+const formatPrescribedHistorySet = (set: PrescribedSet) => {
+  const quantity = set.set_type === 'time' ? `${set.quantity}"` : `${set.quantity}`
+  const weight = set.weight_kg === null ? '' : ` / ${set.weight_kg}kg`
+  return `${quantity}${weight}`
+}
+
+const formatLoggedHistorySet = (set: LoggedSet) => {
+  const quantity = set.actual_seconds ?? set.actual_reps
+  const weight = set.actual_weight_kg === null ? '' : ` / ${set.actual_weight_kg}kg`
+  if (!quantity && set.actual_weight_kg === null) return null
+  return `${quantity ?? '—'}${weight}`
+}
+
+const summarizePrescribedSets = (sets: PrescribedSet[]) => {
+  if (sets.length === 0) return 'Sin prescripción'
+
+  const sortedSets = [...sets].sort((a, b) => a.set_number - b.set_number)
+  const firstSet = sortedSets[0]
+  const allEqual = sortedSets.every(set =>
+    set.set_type === firstSet.set_type &&
+    set.quantity === firstSet.quantity &&
+    set.weight_kg === firstSet.weight_kg
+  )
+
+  if (allEqual) {
+    return `${sortedSets.length}×${formatPrescribedHistorySet(firstSet)}`
+  }
+
+  return sortedSets.map(formatPrescribedHistorySet).join(', ')
+}
+
+const summarizeLoggedSets = (sets: LoggedSet[]) => {
+  const sortedValues = [...sets]
+    .sort((a, b) => a.set_number - b.set_number)
+    .map(formatLoggedHistorySet)
+    .filter((value): value is string => Boolean(value))
+
+  if (sortedValues.length === 0) return 'Sin registro'
+
+  const firstValue = sortedValues[0]
+  const allEqual = sortedValues.every(value => value === firstValue)
+
+  if (allEqual) {
+    return `${sortedValues.length}×${firstValue}`
+  }
+
+  return sortedValues.join(', ')
+}
+
 export function RoutineForm({
   initialData,
   studentId,
@@ -113,6 +189,8 @@ export function RoutineForm({
 }: RoutineFormProps) {
   const { students, loading: studentsLoading } = useStudents()
   const { exercises, loading: exercisesLoading } = useExercises()
+  const { patterns } = useMovementPatterns()
+  const { directions } = useDirections()
 
   const [formData, setFormData] = useState<FormData>(() => {
     if (initialData) return initialData
@@ -138,6 +216,12 @@ export function RoutineForm({
   const [currentDayIndex, setCurrentDayIndex] = useState<number | null>(null)
   const [currentBlockIndex, setCurrentBlockIndex] = useState<number | null>(null)
   const [exerciseSearch, setExerciseSearch] = useState('')
+  const [exercisePatternFilter, setExercisePatternFilter] = useState('')
+  const [exerciseDirectionFilter, setExerciseDirectionFilter] = useState('')
+  const [exerciseChainFilter, setExerciseChainFilter] = useState<ChainType | ''>('')
+  const [exerciseHistory, setExerciseHistory] = useState<Record<string, LastExerciseExecution>>({})
+  const [exerciseHistoryLoading, setExerciseHistoryLoading] = useState(false)
+  const [exerciseHistoryError, setExerciseHistoryError] = useState<string | null>(null)
   const [selectedWeekByExerciseId, setSelectedWeekByExerciseId] = useState<Record<string, number>>({})
   const [expandedProgressionIds, setExpandedProgressionIds] = useState<Set<string>>(new Set())
   const [collapsedDayIds, setCollapsedDayIds] = useState<Set<string>>(() => {
@@ -149,9 +233,103 @@ export function RoutineForm({
     onChange?.(formData)
   }, [formData, onChange])
 
+  const selectedStudentId = studentId || formData.student_id
+
+  useEffect(() => {
+    if (!exerciseModalOpen || !selectedStudentId) {
+      setExerciseHistory({})
+      setExerciseHistoryLoading(false)
+      setExerciseHistoryError(null)
+      return
+    }
+
+    let isCancelled = false
+
+    const fetchExerciseHistory = async () => {
+      setExerciseHistoryLoading(true)
+      setExerciseHistoryError(null)
+
+      try {
+        const { data, error } = await supabase
+          .from('workout_logs')
+          .select(`
+            completed_at,
+            week_number,
+            routine:routines(name),
+            logged_sets(*),
+            routine_day:routine_days(
+              routine_blocks(
+                block_exercises(
+                  id,
+                  exercise_id,
+                  prescribed_sets(*)
+                )
+              )
+            )
+          `)
+          .eq('student_id', selectedStudentId)
+          .order('completed_at', { ascending: false })
+          .limit(200)
+
+        if (error) throw error
+        if (isCancelled) return
+
+        const historyByExercise: Record<string, LastExerciseExecution> = {}
+        const rows = (data || []) as unknown as ExerciseHistoryRow[]
+
+        rows.forEach(row => {
+          row.routine_day?.routine_blocks.forEach(block => {
+            block.block_exercises.forEach(blockExercise => {
+              if (historyByExercise[blockExercise.exercise_id]) return
+
+              const prescribedSets = blockExercise.prescribed_sets.filter(set => set.week_number === row.week_number)
+              const loggedSets = row.logged_sets.filter(set => set.block_exercise_id === blockExercise.id)
+
+              historyByExercise[blockExercise.exercise_id] = {
+                completed_at: row.completed_at,
+                routine_name: row.routine?.name || 'Rutina',
+                week_number: row.week_number,
+                prescribed: summarizePrescribedSets(prescribedSets),
+                registered: summarizeLoggedSets(loggedSets),
+              }
+            })
+          })
+        })
+
+        setExerciseHistory(historyByExercise)
+      } catch (err) {
+        if (!isCancelled) {
+          setExerciseHistoryError(err instanceof Error ? err.message : 'Error al cargar historial')
+        }
+      } finally {
+        if (!isCancelled) {
+          setExerciseHistoryLoading(false)
+        }
+      }
+    }
+
+    void fetchExerciseHistory()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [exerciseModalOpen, selectedStudentId])
+
   // Filtrar ejercicios para el modal de selección
-  const filteredExercises = exercises.filter(e =>
-    e.name.toLowerCase().includes(exerciseSearch.toLowerCase())
+  const filteredExercises = exercises.filter(e => {
+    const matchesSearch = e.name.toLowerCase().includes(exerciseSearch.toLowerCase())
+    const matchesPattern = !exercisePatternFilter || e.movement_pattern_id === exercisePatternFilter
+    const matchesDirection = !exerciseDirectionFilter || e.direction_id === exerciseDirectionFilter
+    const matchesChain = !exerciseChainFilter || e.chain_type === exerciseChainFilter
+
+    return matchesSearch && matchesPattern && matchesDirection && matchesChain
+  })
+
+  const hasExerciseFilters = Boolean(
+    exerciseSearch ||
+    exercisePatternFilter ||
+    exerciseDirectionFilter ||
+    exerciseChainFilter
   )
 
   // Handlers básicos
@@ -196,6 +374,13 @@ export function RoutineForm({
       }
       return next
     })
+  }
+
+  const clearExerciseFilters = () => {
+    setExerciseSearch('')
+    setExercisePatternFilter('')
+    setExerciseDirectionFilter('')
+    setExerciseChainFilter('')
   }
 
   // Cambiar total de semanas - ajusta los sets de todos los ejercicios
@@ -312,7 +497,7 @@ export function RoutineForm({
   const openExerciseModal = (dayIndex: number, blockIndex: number) => {
     setCurrentDayIndex(dayIndex)
     setCurrentBlockIndex(blockIndex)
-    setExerciseSearch('')
+    clearExerciseFilters()
     setExerciseModalOpen(true)
   }
 
@@ -1111,11 +1296,60 @@ export function RoutineForm({
         size="lg"
       >
         <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Select
+              label="Patrón de movimiento"
+              value={exercisePatternFilter}
+              onChange={(e) => setExercisePatternFilter(e.target.value)}
+              options={patterns.map(pattern => ({ value: pattern.id, label: pattern.name }))}
+              placeholder="Todos"
+            />
+            <Select
+              label="Dirección"
+              value={exerciseDirectionFilter}
+              onChange={(e) => setExerciseDirectionFilter(e.target.value)}
+              options={directions.map(direction => ({ value: direction.id, label: direction.name }))}
+              placeholder="Todas"
+            />
+            <Select
+              label="Tipo de cadena"
+              value={exerciseChainFilter}
+              onChange={(e) => setExerciseChainFilter(e.target.value as ChainType | '')}
+              options={[
+                { value: 'abierta', label: 'Abierta' },
+                { value: 'cerrada', label: 'Cerrada' },
+              ]}
+              placeholder="Todas"
+            />
+          </div>
+
           <Input
             value={exerciseSearch}
             onChange={(e) => setExerciseSearch(e.target.value)}
             placeholder="Buscar ejercicio..."
           />
+
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-gray-500">
+              {filteredExercises.length} de {exercises.length} ejercicios
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={clearExerciseFilters}
+              disabled={!hasExerciseFilters}
+            >
+              Limpiar filtros
+            </Button>
+          </div>
+
+          {selectedStudentId && exerciseHistoryLoading && (
+            <p className="text-sm text-gray-500">Cargando historial del alumno...</p>
+          )}
+          {exerciseHistoryError && (
+            <p className="text-sm text-red-600">{exerciseHistoryError}</p>
+          )}
 
           <div className="max-h-96 overflow-y-auto space-y-1">
             {exercisesLoading ? (
@@ -1125,20 +1359,33 @@ export function RoutineForm({
             ) : filteredExercises.length === 0 ? (
               <p className="text-gray-500 text-center py-4">No se encontraron ejercicios</p>
             ) : (
-              filteredExercises.map(exercise => (
-                <button
-                  key={exercise.id}
-                  onClick={() => addExercise(exercise)}
-                  className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition-colors"
-                >
-                  <span className="font-medium text-gray-900">{exercise.name}</span>
-                  {exercise.movement_pattern && (
-                    <span className="text-sm text-gray-500 ml-2">
-                      ({exercise.movement_pattern.name})
-                    </span>
-                  )}
-                </button>
-              ))
+              filteredExercises.map(exercise => {
+                const lastExecution = exerciseHistory[exercise.id]
+
+                return (
+                  <button
+                    key={exercise.id}
+                    onClick={() => addExercise(exercise)}
+                    className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition-colors"
+                  >
+                    <span className="font-medium text-gray-900">{exercise.name}</span>
+                    {exercise.movement_pattern && (
+                      <span className="text-sm text-gray-500 ml-2">
+                        ({exercise.movement_pattern.name})
+                      </span>
+                    )}
+                    {lastExecution && (
+                      <span className="mt-1 block text-xs leading-5 text-gray-500">
+                        <span className="block">
+                          Última vez: Semana {lastExecution.week_number} — {lastExecution.routine_name} — {new Date(lastExecution.completed_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                        <span className="block">Prescripto: {lastExecution.prescribed}</span>
+                        <span className="block">Registrado: {lastExecution.registered}</span>
+                      </span>
+                    )}
+                  </button>
+                )
+              })
             )}
           </div>
         </div>
