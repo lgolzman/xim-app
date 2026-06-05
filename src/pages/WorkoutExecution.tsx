@@ -34,7 +34,7 @@ export function WorkoutExecution() {
   const { user } = useAuth()
   const isAdminProxy = Boolean(studentId)
   const targetStudentId = isAdminProxy ? studentId : user?.id
-  const { info: nextWorkoutInfo, loading: nextWorkoutLoading } = useNextWorkout(isAdminProxy ? studentId : undefined)
+  const { info: nextWorkoutInfo, loading: nextWorkoutLoading } = useNextWorkout(targetStudentId)
   const { routine, loading: routineLoading } = useActiveRoutine(targetStudentId)
   const { logs, createWorkoutLog } = useWorkoutLogs(targetStudentId, routine?.id)
   const { exercises } = useExercises()
@@ -90,6 +90,8 @@ export function WorkoutExecution() {
         setSelectedWeekByExerciseId({})
         setExpandedBlockIds(new Set(dayData.routine_blocks[0] ? [dayData.routine_blocks[0].id] : []))
         setCompletedBlockIds(new Set())
+      } else {
+        setDay(null)
       }
     }
   }, [routineLoading, nextWorkoutLoading, routine, activeDayId, weekNumber])
