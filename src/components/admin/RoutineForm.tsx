@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
@@ -82,6 +82,7 @@ interface RoutineFormProps {
   initialData?: FormData
   studentId?: string // Pre-selected student
   onSubmit: (data: FormData, action: 'draft' | 'active') => Promise<void>
+  onAutoSave?: (data: FormData) => Promise<void>
   onCancel: () => void
   onChange?: (data: FormData) => void
   isEditing?: boolean
@@ -181,6 +182,7 @@ export function RoutineForm({
   initialData,
   studentId,
   onSubmit,
+  onAutoSave,
   onCancel,
   onChange,
   isEditing = false,
@@ -222,16 +224,88 @@ export function RoutineForm({
   const [exerciseHistory, setExerciseHistory] = useState<Record<string, LastExerciseExecution>>({})
   const [exerciseHistoryLoading, setExerciseHistoryLoading] = useState(false)
   const [exerciseHistoryError, setExerciseHistoryError] = useState<string | null>(null)
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [autoSavedAt, setAutoSavedAt] = useState<Date | null>(null)
+  const [autoSaveError, setAutoSaveError] = useState<string | null>(null)
   const [selectedWeekByExerciseId, setSelectedWeekByExerciseId] = useState<Record<string, number>>({})
   const [expandedProgressionIds, setExpandedProgressionIds] = useState<Set<string>>(new Set())
   const [collapsedDayIds, setCollapsedDayIds] = useState<Set<string>>(() => {
     const initialDays = initialData?.days || []
     return new Set(initialDays.slice(0, -1).map(day => day.id))
   })
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoSaveInFlightRef = useRef(false)
+  const onAutoSaveRef = useRef(onAutoSave)
+  const didMountRef = useRef(false)
+  const isActiveRoutine = routineStatus === 'active'
+  const isArchivedRoutine = routineStatus === 'archived'
+  const hasRoutineName = formData.name.trim().length > 0
+  const hasAutoSave = Boolean(onAutoSave)
+
+  // Validar formulario
+  const isValid = useCallback(() => {
+    if (!formData.student_id) return false
+    if (!formData.name.trim()) return false
+    if (formData.days.length === 0) return false
+
+    // Verificar que al menos un día tenga ejercicios
+    const hasExercises = formData.days.some(d =>
+      d.blocks.some(b => b.exercises.length > 0)
+    )
+    return hasExercises
+  }, [formData])
 
   useEffect(() => {
     onChange?.(formData)
   }, [formData, onChange])
+
+  useEffect(() => {
+    onAutoSaveRef.current = onAutoSave
+  }, [onAutoSave])
+
+  useEffect(() => {
+    if (!hasAutoSave || isArchivedRoutine || loading) return
+
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
+    }
+
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+
+    if (!isValid()) {
+      setAutoSaveStatus('idle')
+      return
+    }
+
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (autoSaveInFlightRef.current || !onAutoSaveRef.current) return
+
+      autoSaveInFlightRef.current = true
+      setAutoSaveStatus('saving')
+      setAutoSaveError(null)
+      onAutoSaveRef.current(formData)
+        .then(() => {
+          setAutoSaveStatus('saved')
+          setAutoSavedAt(new Date())
+        })
+        .catch((err) => {
+          setAutoSaveError(err instanceof Error ? err.message : 'No se pudo guardar el borrador')
+          setAutoSaveStatus('error')
+        })
+        .finally(() => {
+          autoSaveInFlightRef.current = false
+        })
+    }, 3000)
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+    }
+  }, [formData, hasAutoSave, isArchivedRoutine, isValid, loading])
 
   const selectedStudentId = studentId || formData.student_id
 
@@ -415,6 +489,8 @@ export function RoutineForm({
 
   // Agregar día
   const addDay = () => {
+    if (!hasRoutineName) return
+
     const newDayNumber = formData.days.length + 1
     const newDayId = generateId()
     setCollapsedDayIds(new Set(formData.days.map(day => day.id)))
@@ -453,6 +529,8 @@ export function RoutineForm({
 
   // Agregar bloque a un día
   const addBlock = (dayIndex: number) => {
+    if (!hasRoutineName) return
+
     const day = formData.days[dayIndex]
     const usedLetters = day.blocks.map(b => b.block_letter)
     const nextLetter = BLOCK_LETTERS.find(l => !usedLetters.includes(l)) || 'X'
@@ -495,6 +573,8 @@ export function RoutineForm({
 
   // Abrir modal para agregar ejercicio
   const openExerciseModal = (dayIndex: number, blockIndex: number) => {
+    if (!hasRoutineName) return
+
     setCurrentDayIndex(dayIndex)
     setCurrentBlockIndex(blockIndex)
     clearExerciseFilters()
@@ -503,6 +583,7 @@ export function RoutineForm({
 
   // Agregar ejercicio al bloque
   const addExercise = (exercise: Exercise) => {
+    if (!hasRoutineName) return
     if (currentDayIndex === null || currentBlockIndex === null) return
 
     const block = formData.days[currentDayIndex].blocks[currentBlockIndex]
@@ -873,29 +954,26 @@ export function RoutineForm({
     }))
   }
 
-  // Validar formulario
-  const isValid = () => {
-    if (!formData.student_id) return false
-    if (!formData.name.trim()) return false
-    if (formData.days.length === 0) return false
-
-    // Verificar que al menos un día tenga ejercicios
-    const hasExercises = formData.days.some(d =>
-      d.blocks.some(b => b.exercises.length > 0)
-    )
-    return hasExercises
-  }
-
   const handleSubmit = async (action: 'draft' | 'active') => {
     if (!isValid()) return
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
     await onSubmit(formData, action)
   }
 
-  const isActiveRoutine = routineStatus === 'active'
-  const isArchivedRoutine = routineStatus === 'archived'
-
   return (
     <div className="space-y-6">
+      {onAutoSave && !isArchivedRoutine && (
+        <div className="text-xs text-gray-500">
+          {autoSaveStatus === 'saving' && '● Guardando borrador...'}
+          {autoSaveStatus === 'saved' && autoSavedAt && (
+            `✓ Borrador guardado hace ${Math.max(0, Math.floor((Date.now() - autoSavedAt.getTime()) / 1000))} segundos`
+          )}
+          {autoSaveStatus === 'error' && `⚠ Error al guardar borrador${autoSaveError ? `: ${autoSaveError}` : ''}`}
+        </div>
+      )}
+
       {/* Datos básicos */}
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Datos de la rutina</h3>
@@ -939,6 +1017,12 @@ export function RoutineForm({
       {/* Días */}
       <div className="bg-white border border-gray-200 rounded-lg">
         <div className="p-4 space-y-4">
+          {!hasRoutineName && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Completá el nombre de la rutina para habilitar bloques y ejercicios. Así el borrador puede guardarse automáticamente.
+            </div>
+          )}
+
           {formData.days.map((day, dayIndex) => {
             const isCollapsed = collapsedDayIds.has(day.id)
 
@@ -995,6 +1079,7 @@ export function RoutineForm({
                     <Button
                       size="sm"
                       variant="ghost"
+                      disabled={!hasRoutineName}
                       onClick={(e) => {
                         e.stopPropagation()
                         addBlock(dayIndex)
@@ -1032,6 +1117,7 @@ export function RoutineForm({
                         <Button
                           size="sm"
                           variant="ghost"
+                          disabled={!hasRoutineName}
                           onClick={() => openExerciseModal(dayIndex, blockIndex)}
                         >
                           + Ejercicio
@@ -1053,7 +1139,9 @@ export function RoutineForm({
                     <div className="p-3 space-y-3">
                       {block.exercises.length === 0 ? (
                         <p className="text-gray-400 text-sm text-center py-2">
-                          Sin ejercicios. Agregá uno con el botón + Ejercicio.
+                          {hasRoutineName
+                            ? 'Sin ejercicios. Agregá uno con el botón + Ejercicio.'
+                            : 'Sin ejercicios. Primero completá el nombre de la rutina.'}
                         </p>
                       ) : (
                         block.exercises.map((exercise, exerciseIndex) => {
@@ -1240,6 +1328,7 @@ export function RoutineForm({
                       type="button"
                       size="sm"
                       variant="secondary"
+                      disabled={!hasRoutineName}
                       onClick={() => addBlock(dayIndex)}
                     >
                       + Agregar bloque
@@ -1251,7 +1340,7 @@ export function RoutineForm({
             )
           })}
 
-          <Button variant="secondary" onClick={addDay} className="w-full">
+          <Button variant="secondary" onClick={addDay} disabled={!hasRoutineName} className="w-full">
             + Agregar día
           </Button>
         </div>
