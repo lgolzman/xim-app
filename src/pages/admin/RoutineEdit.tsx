@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { Layout } from '../../components/layout/Layout'
 import { RoutineForm } from '../../components/admin/RoutineForm'
@@ -172,6 +172,43 @@ export function RoutineEdit() {
     }
   }
 
+  const handleAutoSave = useCallback(async (formData: RoutineFormData) => {
+    if (!routineId || !routine) return
+
+    const { error: updateError } = await updateRoutine(routineId, {
+      name: formData.name,
+      total_weeks: formData.total_weeks,
+      days: formData.days.map(day => ({
+        id: day.id,
+        day_number: day.day_number,
+        name: day.name || undefined,
+        blocks: day.blocks.map(block => ({
+          id: block.id,
+          block_letter: block.block_letter,
+          block_order: block.block_order,
+          exercises: block.exercises.map(exercise => ({
+            id: exercise.id,
+            exercise_id: exercise.exercise_id,
+            position: exercise.position,
+            note: exercise.note || undefined,
+            sets: exercise.weeks.flatMap(week =>
+              week.sets.map((set, setIndex) => ({
+                id: set.id,
+                week_number: week.week_number,
+                set_number: setIndex + 1,
+                set_type: set.set_type,
+                quantity: set.quantity,
+                weight_kg: set.weight_kg ? parseFloat(set.weight_kg) : undefined,
+              }))
+            ),
+          })),
+        })),
+      })),
+    })
+
+    if (updateError) throw new Error(updateError)
+  }, [routine, routineId, updateRoutine])
+
   const handleCancel = () => {
     if (routine) {
       navigate(`/admin/students/${routine.student_id}`)
@@ -281,6 +318,7 @@ export function RoutineEdit() {
           <RoutineForm
             initialData={initialFormData}
             onSubmit={handleSubmit}
+            onAutoSave={handleAutoSave}
             onCancel={handleCancel}
             isEditing={true}
             routineStatus={routine.status}

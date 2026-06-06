@@ -26,6 +26,48 @@ interface SetInput {
   actual_seconds: string
 }
 
+interface WorkoutDraftSet {
+  reps?: string
+  weight?: string
+  seconds?: string
+}
+
+interface WorkoutDraft {
+  loggedSets: Record<string, Record<string, WorkoutDraftSet>>
+  exerciseNotes: Record<string, string>
+  generalNote: string
+  completedBlockIds?: string[]
+  expandedBlockIds?: string[]
+  savedAt: string
+}
+
+const getWorkoutDraftKey = (studentId: string, routineDayId: string, weekNumber: number) =>
+  `workout_draft_${studentId}_${routineDayId}_${weekNumber}`
+
+const readWorkoutDraft = (key: string): WorkoutDraft | null => {
+  try {
+    const rawDraft = localStorage.getItem(key)
+    if (!rawDraft) return null
+    return JSON.parse(rawDraft) as WorkoutDraft
+  } catch {
+    return null
+  }
+}
+
+const formatDraftAge = (savedAt: string) => {
+  const elapsedMs = Date.now() - new Date(savedAt).getTime()
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return 'recién'
+
+  const elapsedMinutes = Math.floor(elapsedMs / 60000)
+  if (elapsedMinutes < 1) return 'hace menos de 1 minuto'
+  if (elapsedMinutes === 1) return 'hace 1 minuto'
+  if (elapsedMinutes < 60) return `hace ${elapsedMinutes} minutos`
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60)
+  if (elapsedHours === 1) return 'hace 1 hora'
+  return `hace ${elapsedHours} horas`
+}
+
 export function WorkoutExecution() {
   const navigate = useNavigate()
   const { dayId, studentId } = useParams<{ dayId?: string; studentId?: string }>()
@@ -42,11 +84,16 @@ export function WorkoutExecution() {
   const activeDayId = dayId || selectedAdminDayId || nextWorkoutInfo?.suggestedDay?.id
   const weekNumber = parseInt(searchParams.get('week') || String(nextWorkoutInfo?.currentWeek || 1))
   const shouldShowAdminDaySelector = isAdminProxy && !dayId && !selectedAdminDayId
+  const draftKey = targetStudentId && activeDayId
+    ? getWorkoutDraftKey(targetStudentId, activeDayId, weekNumber)
+    : null
 
   const [day, setDay] = useState<RoutineDayWithBlocks | null>(null)
   const [setInputs, setSetInputs] = useState<SetInput[]>([])
   const [studentNote, setStudentNote] = useState('')
   const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({})
+  const [draftReady, setDraftReady] = useState(false)
+  const [recoveredDraftSavedAt, setRecoveredDraftSavedAt] = useState<string | null>(null)
   const [visibleExerciseNotes, setVisibleExerciseNotes] = useState<Set<string>>(new Set())
   const [expandedBlockIds, setExpandedBlockIds] = useState<Set<string>>(new Set())
   const [completedBlockIds, setCompletedBlockIds] = useState<Set<string>>(new Set())
@@ -63,7 +110,9 @@ export function WorkoutExecution() {
     if (!routineLoading && !nextWorkoutLoading && activeDayId) {
       const dayData = routine?.routine_days.find(d => d.id === activeDayId)
       if (dayData) {
+        setDraftReady(false)
         setDay(dayData)
+        const draft = targetStudentId ? readWorkoutDraft(getWorkoutDraftKey(targetStudentId, dayData.id, weekNumber)) : null
 
         // Crear inputs para cada serie prescrita de la semana actual
         const inputs: SetInput[] = []
@@ -71,30 +120,94 @@ export function WorkoutExecution() {
           block.block_exercises.forEach(exercise => {
             const weekSets = exercise.prescribed_sets.filter(s => s.week_number === weekNumber)
             weekSets.forEach(set => {
+              const draftSet = draft?.loggedSets[exercise.id]?.[String(set.set_number)]
               inputs.push({
                 block_exercise_id: exercise.id,
                 set_number: set.set_number,
                 set_type: set.set_type,
                 prescribed_quantity: set.quantity,
                 prescribed_weight: set.weight_kg,
-                actual_reps: '',
-                actual_weight: '',
-                actual_seconds: '',
+                actual_reps: draftSet?.reps || '',
+                actual_weight: draftSet?.weight || '',
+                actual_seconds: draftSet?.seconds || '',
               })
             })
           })
         })
         setSetInputs(inputs)
-        setExerciseNotes({})
-        setVisibleExerciseNotes(new Set())
+        setExerciseNotes(draft?.exerciseNotes || {})
+        setStudentNote(draft?.generalNote || '')
+        setRecoveredDraftSavedAt(draft?.savedAt || null)
+        setVisibleExerciseNotes(new Set(
+          Object.entries(draft?.exerciseNotes || {})
+            .filter(([, note]) => note.trim().length > 0)
+            .map(([blockExerciseId]) => blockExerciseId)
+        ))
         setSelectedWeekByExerciseId({})
-        setExpandedBlockIds(new Set(dayData.routine_blocks[0] ? [dayData.routine_blocks[0].id] : []))
-        setCompletedBlockIds(new Set())
+        const blockIds = new Set(dayData.routine_blocks.map(block => block.id))
+        const draftCompletedBlockIds = (draft?.completedBlockIds || []).filter(blockId => blockIds.has(blockId))
+        const draftExpandedBlockIds = (draft?.expandedBlockIds || []).filter(blockId => blockIds.has(blockId))
+        setCompletedBlockIds(new Set(draftCompletedBlockIds))
+        setExpandedBlockIds(new Set(
+          draftExpandedBlockIds.length > 0
+            ? draftExpandedBlockIds
+            : dayData.routine_blocks[0] ? [dayData.routine_blocks[0].id] : []
+        ))
+        setDraftReady(true)
       } else {
+        setDraftReady(false)
+        setRecoveredDraftSavedAt(null)
         setDay(null)
       }
     }
-  }, [routineLoading, nextWorkoutLoading, routine, activeDayId, weekNumber])
+  }, [routineLoading, nextWorkoutLoading, routine, activeDayId, weekNumber, targetStudentId])
+
+  useEffect(() => {
+    if (!draftKey || !draftReady || saving) return
+
+    const loggedSets = setInputs.reduce<WorkoutDraft['loggedSets']>((acc, input) => {
+      if (!input.actual_reps && !input.actual_weight && !input.actual_seconds) return acc
+
+      if (!acc[input.block_exercise_id]) {
+        acc[input.block_exercise_id] = {}
+      }
+
+      acc[input.block_exercise_id][String(input.set_number)] = {
+        reps: input.actual_reps || undefined,
+        weight: input.actual_weight || undefined,
+        seconds: input.actual_seconds || undefined,
+      }
+
+      return acc
+    }, {})
+
+    const trimmedExerciseNotes = Object.fromEntries(
+      Object.entries(exerciseNotes).filter(([, note]) => note.trim().length > 0)
+    )
+
+    const hasDraftContent =
+      Object.keys(loggedSets).length > 0 ||
+      Object.keys(trimmedExerciseNotes).length > 0 ||
+      studentNote.trim().length > 0 ||
+      completedBlockIds.size > 0
+
+    if (!hasDraftContent) {
+      localStorage.removeItem(draftKey)
+      setRecoveredDraftSavedAt(null)
+      return
+    }
+
+    const draft: WorkoutDraft = {
+      loggedSets,
+      exerciseNotes: trimmedExerciseNotes,
+      generalNote: studentNote,
+      completedBlockIds: Array.from(completedBlockIds),
+      expandedBlockIds: Array.from(expandedBlockIds),
+      savedAt: new Date().toISOString(),
+    }
+
+    localStorage.setItem(draftKey, JSON.stringify(draft))
+  }, [completedBlockIds, draftKey, draftReady, exerciseNotes, expandedBlockIds, saving, setInputs, studentNote])
 
   const updateSetInput = (blockExerciseId: string, setNumber: number, field: string, value: string) => {
     setSetInputs(prev =>
@@ -302,6 +415,9 @@ export function WorkoutExecution() {
         return
       }
 
+      if (draftKey) {
+        localStorage.removeItem(draftKey)
+      }
       navigate(isAdminProxy && studentId ? `/admin/students/${studentId}` : '/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar entrenamiento')
@@ -311,6 +427,9 @@ export function WorkoutExecution() {
   }
 
   const handleCancel = () => {
+    if (draftKey) {
+      localStorage.removeItem(draftKey)
+    }
     navigate(-1)
   }
 
@@ -455,6 +574,12 @@ export function WorkoutExecution() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
             {error}
+          </div>
+        )}
+
+        {recoveredDraftSavedAt && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+            Recuperamos tu progreso de una sesión anterior ({formatDraftAge(recoveredDraftSavedAt)}).
           </div>
         )}
 
