@@ -235,6 +235,7 @@ export function RoutineForm({
   })
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoSaveInFlightRef = useRef(false)
+  const autoSavePromiseRef = useRef<Promise<void> | null>(null)
   const onAutoSaveRef = useRef(onAutoSave)
   const didMountRef = useRef(false)
   const isActiveRoutine = routineStatus === 'active'
@@ -286,7 +287,10 @@ export function RoutineForm({
       autoSaveInFlightRef.current = true
       setAutoSaveStatus('saving')
       setAutoSaveError(null)
-      onAutoSaveRef.current(formData)
+      const autoSavePromise = onAutoSaveRef.current(formData)
+      autoSavePromiseRef.current = autoSavePromise
+
+      autoSavePromise
         .then(() => {
           setAutoSaveStatus('saved')
           setAutoSavedAt(new Date())
@@ -297,6 +301,7 @@ export function RoutineForm({
         })
         .finally(() => {
           autoSaveInFlightRef.current = false
+          autoSavePromiseRef.current = null
         })
     }, 3000)
 
@@ -958,6 +963,9 @@ export function RoutineForm({
     if (!isValid()) return
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current)
+    }
+    if (autoSavePromiseRef.current) {
+      await autoSavePromiseRef.current.catch(() => undefined)
     }
     await onSubmit(formData, action)
   }

@@ -11,6 +11,15 @@ import type {
   RoutineStatus,
 } from '../lib/types'
 
+function getErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof Error) return err.message
+  if (err && typeof err === 'object' && 'message' in err) {
+    const message = (err as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return fallback
+}
+
 // Datos para crear una rutina completa
 export interface CreateRoutineData {
   student_id: string
@@ -290,27 +299,28 @@ export function useRoutines(studentId?: string) {
       if (!current.data) throw new Error('Rutina no encontrada')
 
       const existingDays = new Map(current.data.routine_days.map(day => [day.id, day]))
+      const existingDaysByNumber = new Map(current.data.routine_days.map(day => [day.day_number, day]))
       const existingBlocks = new Map<string, RoutineBlock>()
+      const existingBlocksByDayAndLetter = new Map<string, RoutineBlock>()
+      const existingBlocksByDayAndOrder = new Map<string, RoutineBlock>()
       const existingExercises = new Map<string, BlockExercise>()
+      const existingExercisesByBlockAndPosition = new Map<string, BlockExercise>()
 
       current.data.routine_days.forEach(day => {
         day.routine_blocks.forEach(block => {
           existingBlocks.set(block.id, block)
+          existingBlocksByDayAndLetter.set(`${day.id}:${block.block_letter}`, block)
+          existingBlocksByDayAndOrder.set(`${day.id}:${block.block_order}`, block)
           block.block_exercises.forEach(exercise => {
             existingExercises.set(exercise.id, exercise)
+            existingExercisesByBlockAndPosition.set(`${block.id}:${exercise.position}`, exercise)
           })
         })
       })
 
       const keptDayIds = new Set<string>()
       const keptBlockIds = new Set<string>()
-      const keptExerciseIds = new Set(
-        data.days.flatMap(day =>
-          day.blocks.flatMap(block =>
-            block.exercises.map(exercise => exercise.id)
-          )
-        )
-      )
+      const keptExerciseIds = new Set<string>()
 
       const { error: routineError } = await supabase
         .from('routines')
@@ -321,6 +331,157 @@ export function useRoutines(studentId?: string) {
         .eq('id', routineId)
 
       if (routineError) throw routineError
+
+      for (const day of data.days) {
+        const existingDay = existingDays.get(day.id) || existingDaysByNumber.get(day.day_number)
+        let dayId = existingDay?.id || day.id
+
+        if (existingDay) {
+          const { error } = await supabase
+            .from('routine_days')
+            .update({
+              day_number: day.day_number,
+              name: day.name || null,
+            })
+            .eq('id', existingDay.id)
+
+          if (error) throw error
+        } else {
+          const { data: insertedDay, error } = await supabase
+            .from('routine_days')
+            .upsert({
+              routine_id: routineId,
+              day_number: day.day_number,
+              name: day.name || null,
+            }, { onConflict: 'routine_id,day_number' })
+            .select()
+            .single()
+
+          if (error) throw error
+          dayId = insertedDay.id
+        }
+
+        keptDayIds.add(dayId)
+
+        for (const block of day.blocks) {
+          const existingBlock = existingBlocks.get(block.id) ||
+            existingBlocksByDayAndLetter.get(`${dayId}:${block.block_letter}`) ||
+            existingBlocksByDayAndOrder.get(`${dayId}:${block.block_order}`)
+          let blockId = existingBlock?.id || block.id
+
+          if (existingBlock) {
+            const { error } = await supabase
+              .from('routine_blocks')
+              .update({
+                routine_day_id: dayId,
+                block_letter: block.block_letter,
+                block_order: block.block_order,
+              })
+              .eq('id', existingBlock.id)
+
+            if (error) throw error
+          } else {
+            const { data: insertedBlock, error } = await supabase
+              .from('routine_blocks')
+              .upsert({
+                routine_day_id: dayId,
+                block_letter: block.block_letter,
+                block_order: block.block_order,
+              }, { onConflict: 'routine_day_id,block_letter' })
+              .select()
+              .single()
+
+            if (error) throw error
+            blockId = insertedBlock.id
+          }
+
+          keptBlockIds.add(blockId)
+
+          for (const exercise of block.exercises) {
+            const existingExercise = existingExercises.get(exercise.id) ||
+              existingExercisesByBlockAndPosition.get(`${blockId}:${exercise.position}`)
+            let blockExerciseId = existingExercise?.id || exercise.id
+
+            if (existingExercise) {
+              const { error } = await supabase
+                .from('block_exercises')
+                .update({
+                  block_id: blockId,
+                  exercise_id: exercise.exercise_id,
+                  position: exercise.position,
+                  note: exercise.note || null,
+                  active: true,
+                })
+                .eq('id', existingExercise.id)
+
+              if (error) throw error
+            } else {
+              const { data: insertedExercise, error } = await supabase
+                .from('block_exercises')
+                .insert({
+                  block_id: blockId,
+                  exercise_id: exercise.exercise_id,
+                  position: exercise.position,
+                  note: exercise.note || null,
+                  active: true,
+                })
+                .select()
+                .single()
+
+              if (error) {
+                const { data: concurrentExercise, error: concurrentExerciseError } = await supabase
+                  .from('block_exercises')
+                  .select()
+                  .eq('block_id', blockId)
+                  .eq('position', exercise.position)
+                  .eq('active', true)
+                  .maybeSingle()
+
+                if (concurrentExerciseError || !concurrentExercise) throw error
+
+                const { error: updateConcurrentExerciseError } = await supabase
+                  .from('block_exercises')
+                  .update({
+                    exercise_id: exercise.exercise_id,
+                    note: exercise.note || null,
+                    active: true,
+                  })
+                  .eq('id', concurrentExercise.id)
+
+                if (updateConcurrentExerciseError) throw updateConcurrentExerciseError
+                blockExerciseId = concurrentExercise.id
+              } else {
+                blockExerciseId = insertedExercise.id
+              }
+            }
+            keptExerciseIds.add(blockExerciseId)
+
+            const { error: deleteSetsError } = await supabase
+              .from('prescribed_sets')
+              .delete()
+              .eq('block_exercise_id', blockExerciseId)
+
+            if (deleteSetsError) throw deleteSetsError
+
+            const setsToInsert = exercise.sets.map(set => ({
+              block_exercise_id: blockExerciseId,
+              week_number: set.week_number,
+              set_number: set.set_number,
+              set_type: set.set_type,
+              quantity: set.quantity,
+              weight_kg: set.weight_kg || null,
+            }))
+
+            if (setsToInsert.length > 0) {
+              const { error: insertSetsError } = await supabase
+                .from('prescribed_sets')
+                .upsert(setsToInsert, { onConflict: 'block_exercise_id,week_number,set_number' })
+
+              if (insertSetsError) throw insertSetsError
+            }
+          }
+        }
+      }
 
       for (const [exerciseId] of existingExercises) {
         if (keptExerciseIds.has(exerciseId)) continue
@@ -348,127 +509,6 @@ export function useRoutines(studentId?: string) {
           .eq('id', exerciseId)
 
         if (deleteExerciseError) throw deleteExerciseError
-      }
-
-      for (const day of data.days) {
-        let dayId = day.id
-
-        if (existingDays.has(day.id)) {
-          const { error } = await supabase
-            .from('routine_days')
-            .update({
-              day_number: day.day_number,
-              name: day.name || null,
-            })
-            .eq('id', day.id)
-
-          if (error) throw error
-        } else {
-          const { data: insertedDay, error } = await supabase
-            .from('routine_days')
-            .insert({
-              routine_id: routineId,
-              day_number: day.day_number,
-              name: day.name || null,
-            })
-            .select()
-            .single()
-
-          if (error) throw error
-          dayId = insertedDay.id
-        }
-
-        keptDayIds.add(dayId)
-
-        for (const block of day.blocks) {
-          let blockId = block.id
-
-          if (existingBlocks.has(block.id)) {
-            const { error } = await supabase
-              .from('routine_blocks')
-              .update({
-                routine_day_id: dayId,
-                block_letter: block.block_letter,
-                block_order: block.block_order,
-              })
-              .eq('id', block.id)
-
-            if (error) throw error
-          } else {
-            const { data: insertedBlock, error } = await supabase
-              .from('routine_blocks')
-              .insert({
-                routine_day_id: dayId,
-                block_letter: block.block_letter,
-                block_order: block.block_order,
-              })
-              .select()
-              .single()
-
-            if (error) throw error
-            blockId = insertedBlock.id
-          }
-
-          keptBlockIds.add(blockId)
-
-          for (const exercise of block.exercises) {
-            let blockExerciseId = exercise.id
-
-            if (existingExercises.has(exercise.id)) {
-              const { error } = await supabase
-                .from('block_exercises')
-                .update({
-                  block_id: blockId,
-                  exercise_id: exercise.exercise_id,
-                  position: exercise.position,
-                  note: exercise.note || null,
-                  active: true,
-                })
-                .eq('id', exercise.id)
-
-              if (error) throw error
-            } else {
-              const { data: insertedExercise, error } = await supabase
-                .from('block_exercises')
-                .insert({
-                  block_id: blockId,
-                  exercise_id: exercise.exercise_id,
-                  position: exercise.position,
-                  note: exercise.note || null,
-                  active: true,
-                })
-                .select()
-                .single()
-
-              if (error) throw error
-              blockExerciseId = insertedExercise.id
-            }
-
-            const { error: deleteSetsError } = await supabase
-              .from('prescribed_sets')
-              .delete()
-              .eq('block_exercise_id', blockExerciseId)
-
-            if (deleteSetsError) throw deleteSetsError
-
-            const setsToInsert = exercise.sets.map(set => ({
-              block_exercise_id: blockExerciseId,
-              week_number: set.week_number,
-              set_number: set.set_number,
-              set_type: set.set_type,
-              quantity: set.quantity,
-              weight_kg: set.weight_kg || null,
-            }))
-
-            if (setsToInsert.length > 0) {
-              const { error: insertSetsError } = await supabase
-                .from('prescribed_sets')
-                .insert(setsToInsert)
-
-              if (insertSetsError) throw insertSetsError
-            }
-          }
-        }
       }
 
       for (const [blockId] of existingBlocks) {
@@ -516,7 +556,7 @@ export function useRoutines(studentId?: string) {
       await fetchRoutines()
       return { error: null }
     } catch (err) {
-      return { error: err instanceof Error ? err.message : 'Error al actualizar rutina' }
+      return { error: getErrorMessage(err, 'Error al actualizar rutina') }
     }
   }
 
