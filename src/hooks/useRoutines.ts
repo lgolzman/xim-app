@@ -11,6 +11,15 @@ import type {
   RoutineStatus,
 } from '../lib/types'
 
+function getErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof Error) return err.message
+  if (err && typeof err === 'object' && 'message' in err) {
+    const message = (err as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return fallback
+}
+
 // Datos para crear una rutina completa
 export interface CreateRoutineData {
   student_id: string
@@ -340,11 +349,11 @@ export function useRoutines(studentId?: string) {
         } else {
           const { data: insertedDay, error } = await supabase
             .from('routine_days')
-            .insert({
+            .upsert({
               routine_id: routineId,
               day_number: day.day_number,
               name: day.name || null,
-            })
+            }, { onConflict: 'routine_id,day_number' })
             .select()
             .single()
 
@@ -374,11 +383,11 @@ export function useRoutines(studentId?: string) {
           } else {
             const { data: insertedBlock, error } = await supabase
               .from('routine_blocks')
-              .insert({
+              .upsert({
                 routine_day_id: dayId,
                 block_letter: block.block_letter,
                 block_order: block.block_order,
-              })
+              }, { onConflict: 'routine_day_id,block_letter' })
               .select()
               .single()
 
@@ -419,8 +428,31 @@ export function useRoutines(studentId?: string) {
                 .select()
                 .single()
 
-              if (error) throw error
-              blockExerciseId = insertedExercise.id
+              if (error) {
+                const { data: concurrentExercise, error: concurrentExerciseError } = await supabase
+                  .from('block_exercises')
+                  .select()
+                  .eq('block_id', blockId)
+                  .eq('position', exercise.position)
+                  .eq('active', true)
+                  .maybeSingle()
+
+                if (concurrentExerciseError || !concurrentExercise) throw error
+
+                const { error: updateConcurrentExerciseError } = await supabase
+                  .from('block_exercises')
+                  .update({
+                    exercise_id: exercise.exercise_id,
+                    note: exercise.note || null,
+                    active: true,
+                  })
+                  .eq('id', concurrentExercise.id)
+
+                if (updateConcurrentExerciseError) throw updateConcurrentExerciseError
+                blockExerciseId = concurrentExercise.id
+              } else {
+                blockExerciseId = insertedExercise.id
+              }
             }
             keptExerciseIds.add(blockExerciseId)
 
@@ -443,7 +475,7 @@ export function useRoutines(studentId?: string) {
             if (setsToInsert.length > 0) {
               const { error: insertSetsError } = await supabase
                 .from('prescribed_sets')
-                .insert(setsToInsert)
+                .upsert(setsToInsert, { onConflict: 'block_exercise_id,week_number,set_number' })
 
               if (insertSetsError) throw insertSetsError
             }
@@ -524,7 +556,7 @@ export function useRoutines(studentId?: string) {
       await fetchRoutines()
       return { error: null }
     } catch (err) {
-      return { error: err instanceof Error ? err.message : 'Error al actualizar rutina' }
+      return { error: getErrorMessage(err, 'Error al actualizar rutina') }
     }
   }
 
