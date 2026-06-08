@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Layout } from '../../components/layout/Layout'
 import { RoutineForm } from '../../components/admin/RoutineForm'
@@ -9,7 +9,7 @@ import { Select } from '../../components/ui/Select'
 import { useRoutines } from '../../hooks/useRoutines'
 import type { CreateRoutineData, UpdateRoutineData } from '../../hooks/useRoutines'
 import { useAuth } from '../../context/AuthContext'
-import type { RoutineWithDays, PrescribedSet } from '../../lib/types'
+import type { RoutineWithDays, RoutineWithStudent, PrescribedSet } from '../../lib/types'
 
 export function RoutineNew() {
   const navigate = useNavigate()
@@ -22,6 +22,7 @@ export function RoutineNew() {
   const [error, setError] = useState<string | null>(null)
   const [copyModalOpen, setCopyModalOpen] = useState(false)
   const [selectedRoutineId, setSelectedRoutineId] = useState('')
+  const [copyStudentFilterId, setCopyStudentFilterId] = useState('')
   const [copying, setCopying] = useState(false)
   const [initialFormData, setInitialFormData] = useState<RoutineFormData | undefined>(undefined)
   const [currentFormData, setCurrentFormData] = useState<RoutineFormData | null>(null)
@@ -107,6 +108,18 @@ export function RoutineNew() {
     }
   }
 
+  const openCopyModal = () => {
+    setCopyStudentFilterId(selectedStudentId || '')
+    setSelectedRoutineId('')
+    setCopyModalOpen(true)
+  }
+
+  const closeCopyModal = () => {
+    setCopyModalOpen(false)
+    setSelectedRoutineId('')
+    setCopyStudentFilterId('')
+  }
+
   const handleCopyRoutine = async () => {
     if (!selectedRoutineId) return
 
@@ -130,8 +143,7 @@ export function RoutineNew() {
     setCurrentFormData(copiedFormData)
     setFormKey(prev => prev + 1)
     setCopying(false)
-    setCopyModalOpen(false)
-    setSelectedRoutineId('')
+    closeCopyModal()
   }
 
   const handleContinueDraft = async () => {
@@ -151,8 +163,35 @@ export function RoutineNew() {
     setFormKey(prev => prev + 1)
   }
 
-  const routineOptions = routines.map(routine => {
-    const studentName = routine.student?.full_name || routine.student?.name || routine.student?.email || 'Alumno'
+  const copyStudentOptions = useMemo(() => {
+    const studentsById = new Map<string, { label: string; count: number }>()
+
+    routines.forEach(routine => {
+      const studentName = getRoutineStudentName(routine)
+      const current = studentsById.get(routine.student_id)
+      studentsById.set(routine.student_id, {
+        label: studentName,
+        count: (current?.count || 0) + 1,
+      })
+    })
+
+    return Array.from(studentsById.entries())
+      .sort(([, a], [, b]) => a.label.localeCompare(b.label))
+      .map(([studentId, student]) => ({
+        value: studentId,
+        label: `${student.label} (${student.count})`,
+      }))
+  }, [routines])
+
+  const filteredCopyRoutines = useMemo(
+    () => copyStudentFilterId
+      ? routines.filter(routine => routine.student_id === copyStudentFilterId)
+      : routines,
+    [copyStudentFilterId, routines]
+  )
+
+  const routineOptions = filteredCopyRoutines.map(routine => {
+    const studentName = getRoutineStudentName(routine)
     const dayCount = routine.routine_days?.length || 0
     return {
       value: routine.id,
@@ -182,7 +221,7 @@ export function RoutineNew() {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => setCopyModalOpen(true)}
+            onClick={openCopyModal}
             disabled={routinesLoading || routines.length === 0}
           >
             Empezar desde una rutina existente
@@ -226,8 +265,7 @@ export function RoutineNew() {
       <Modal
         isOpen={copyModalOpen}
         onClose={() => {
-          setCopyModalOpen(false)
-          setSelectedRoutineId('')
+          closeCopyModal()
         }}
         title="Copiar rutina existente"
         size="lg"
@@ -236,14 +274,32 @@ export function RoutineNew() {
           {routines.length === 0 ? (
             <p className="text-sm text-gray-500">Todavía no hay rutinas disponibles para copiar.</p>
           ) : (
-            <Select
-              label="Rutina"
-              value={selectedRoutineId}
-              onChange={(e) => setSelectedRoutineId(e.target.value)}
-              options={routineOptions}
-              placeholder="Seleccionar rutina"
-              disabled={routinesLoading || copying}
-            />
+            <>
+              <Select
+                label="Filtrar por alumno"
+                value={copyStudentFilterId}
+                onChange={(e) => {
+                  setCopyStudentFilterId(e.target.value)
+                  setSelectedRoutineId('')
+                }}
+                options={copyStudentOptions}
+                placeholder="Todos los alumnos"
+                disabled={routinesLoading || copying}
+              />
+
+              {filteredCopyRoutines.length === 0 ? (
+                <p className="text-sm text-gray-500">No hay rutinas para el alumno seleccionado.</p>
+              ) : (
+                <Select
+                  label="Rutina"
+                  value={selectedRoutineId}
+                  onChange={(e) => setSelectedRoutineId(e.target.value)}
+                  options={routineOptions}
+                  placeholder="Seleccionar rutina"
+                  disabled={routinesLoading || copying}
+                />
+              )}
+            </>
           )}
 
           <div className="flex justify-end gap-3">
@@ -251,8 +307,7 @@ export function RoutineNew() {
               type="button"
               variant="secondary"
               onClick={() => {
-                setCopyModalOpen(false)
-                setSelectedRoutineId('')
+                closeCopyModal()
               }}
               disabled={copying}
             >
@@ -460,4 +515,8 @@ function getStatusLabel(status: string) {
     default:
       return status
   }
+}
+
+function getRoutineStudentName(routine: RoutineWithStudent) {
+  return routine.student?.full_name || routine.student?.name || routine.student?.email || 'Alumno'
 }
