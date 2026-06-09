@@ -157,7 +157,11 @@ export function useRoutines(studentId?: string) {
               *,
               block_exercises(
                 *,
-                exercise:exercises(*),
+                exercise:exercises(
+                  *,
+                  movement_pattern:movement_patterns(*),
+                  direction:directions(*)
+                ),
                 prescribed_sets(*)
               )
             )
