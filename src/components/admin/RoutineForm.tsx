@@ -9,7 +9,7 @@ import { useMovementPatterns } from '../../hooks/useMovementPatterns'
 import { useDirections } from '../../hooks/useDirections'
 import { getBlockColor } from '../../lib/blockColors'
 import { supabase } from '../../lib/supabase'
-import type { ChainType, Exercise, LoggedSet, PrescribedSet, SetType } from '../../lib/types'
+import type { ChainType, Exercise, ExerciseInRoutine, LoggedSet, PrescribedSet, SetType } from '../../lib/types'
 
 // Tipos internos para el formulario
 interface FormSet {
@@ -27,7 +27,7 @@ interface FormWeekSets {
 interface FormExercise {
   id: string
   exercise_id: string
-  exercise?: Exercise
+  exercise?: ExerciseInRoutine
   position: number
   note: string
   weeks: FormWeekSets[]
@@ -1256,8 +1256,15 @@ export function RoutineForm({
                               <span className="w-8 shrink-0 text-xs font-semibold text-gray-500">
                                 {block.block_letter}{exercise.position}
                               </span>
-                              <span className="min-w-0 flex-1 truncate font-medium text-gray-900">
-                                {exercise.exercise?.name || 'Ejercicio'}
+                              <span className="flex min-w-0 flex-1 items-center gap-2">
+                                <span className="min-w-0 truncate font-medium text-gray-900">
+                                  {exercise.exercise?.name || 'Ejercicio'}
+                                </span>
+                                {exercise.exercise?.movement_pattern && (
+                                  <span className="max-w-36 shrink-0 truncate rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                                    {exercise.exercise.movement_pattern.name}
+                                  </span>
+                                )}
                               </span>
                               <Button
                                 size="sm"
@@ -1287,8 +1294,13 @@ export function RoutineForm({
                                   <span className="text-xs text-gray-500 font-medium">
                                     {block.block_letter}{exercise.position}
                                   </span>
-                                  <h4 className="font-medium text-gray-900">
-                                    {exercise.exercise?.name || 'Ejercicio'}
+                                  <h4 className="flex flex-wrap items-center gap-2 font-medium text-gray-900">
+                                    <span>{exercise.exercise?.name || 'Ejercicio'}</span>
+                                    {exercise.exercise?.movement_pattern && (
+                                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                                        {exercise.exercise.movement_pattern.name}
+                                      </span>
+                                    )}
                                   </h4>
                                 </div>
                                 <Button
