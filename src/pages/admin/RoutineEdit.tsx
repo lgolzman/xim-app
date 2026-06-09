@@ -5,8 +5,8 @@ import { RoutineForm } from '../../components/admin/RoutineForm'
 import type { RoutineFormData } from '../../components/admin/RoutineForm'
 import { Button } from '../../components/ui/Button'
 import { useRoutines } from '../../hooks/useRoutines'
+import type { UpdateRoutineData } from '../../hooks/useRoutines'
 import { useAuth } from '../../context/AuthContext'
-import { useExercises } from '../../hooks/useExercises'
 import type { RoutineWithDays } from '../../lib/types'
 
 export function RoutineEdit() {
@@ -14,10 +14,10 @@ export function RoutineEdit() {
   const { routineId } = useParams<{ routineId: string }>()
   const { user } = useAuth()
   const { getRoutineWithDetails, updateRoutine, updateRoutineStatus } = useRoutines()
-  const { exercises } = useExercises()
 
   const [routine, setRoutine] = useState<RoutineWithDays | null>(null)
   const [initialFormData, setInitialFormData] = useState<RoutineFormData | null>(null)
+  const [currentFormData, setCurrentFormData] = useState<RoutineFormData | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -87,13 +87,10 @@ export function RoutineEdit() {
                 }
               })
 
-              // Encontrar el ejercicio completo para mostrar el nombre
-              const exerciseData = exercises.find(e => e.id === ex.exercise_id) || ex.exercise
-
               return {
                 id: ex.id,
                 exercise_id: ex.exercise_id,
-                exercise: exerciseData,
+                exercise: ex.exercise,
                 position: ex.position,
                 note: ex.note || '',
                 weeks,
@@ -104,11 +101,12 @@ export function RoutineEdit() {
       }
 
       setInitialFormData(formData)
+      setCurrentFormData(formData)
       setLoading(false)
     }
 
     loadRoutine()
-  }, [routineId, getRoutineWithDetails, exercises])
+  }, [routineId, getRoutineWithDetails])
 
   const handleSubmit = async (formData: RoutineFormData, action: 'draft' | 'active') => {
     if (!user || !routine || !routineId) return
@@ -117,36 +115,7 @@ export function RoutineEdit() {
     setError(null)
 
     try {
-      const { error: updateError } = await updateRoutine(routineId, {
-        name: formData.name,
-        total_weeks: formData.total_weeks,
-        days: formData.days.map(day => ({
-          id: day.id,
-          day_number: day.day_number,
-          name: day.name || undefined,
-          blocks: day.blocks.map(block => ({
-            id: block.id,
-            block_letter: block.block_letter,
-            block_order: block.block_order,
-            exercises: block.exercises.map(exercise => ({
-              id: exercise.id,
-              exercise_id: exercise.exercise_id,
-              position: exercise.position,
-              note: exercise.note || undefined,
-              sets: exercise.weeks.flatMap(week =>
-                week.sets.map((set, setIndex) => ({
-                  id: set.id,
-                  week_number: week.week_number,
-                  set_number: setIndex + 1,
-                  set_type: set.set_type,
-                  quantity: set.quantity,
-                  weight_kg: set.weight_kg ? parseFloat(set.weight_kg) : undefined,
-                }))
-              ),
-            })),
-          })),
-        })),
-      })
+      const { error: updateError } = await updateRoutine(routineId, formDataToUpdateRoutineData(formData))
 
       if (updateError) {
         setError(updateError)
@@ -175,46 +144,47 @@ export function RoutineEdit() {
   const handleAutoSave = useCallback(async (formData: RoutineFormData) => {
     if (!routineId || !routine) return
 
-    const { error: updateError } = await updateRoutine(routineId, {
-      name: formData.name,
-      total_weeks: formData.total_weeks,
-      days: formData.days.map(day => ({
-        id: day.id,
-        day_number: day.day_number,
-        name: day.name || undefined,
-        blocks: day.blocks.map(block => ({
-          id: block.id,
-          block_letter: block.block_letter,
-          block_order: block.block_order,
-          exercises: block.exercises.map(exercise => ({
-            id: exercise.id,
-            exercise_id: exercise.exercise_id,
-            position: exercise.position,
-            note: exercise.note || undefined,
-            sets: exercise.weeks.flatMap(week =>
-              week.sets.map((set, setIndex) => ({
-                id: set.id,
-                week_number: week.week_number,
-                set_number: setIndex + 1,
-                set_type: set.set_type,
-                quantity: set.quantity,
-                weight_kg: set.weight_kg ? parseFloat(set.weight_kg) : undefined,
-              }))
-            ),
-          })),
-        })),
-      })),
-    })
+    const { error: updateError } = await updateRoutine(routineId, formDataToUpdateRoutineData(formData))
 
     if (updateError) throw new Error(updateError)
   }, [routine, routineId, updateRoutine])
 
-  const handleCancel = () => {
-    if (routine) {
-      navigate(`/admin/students/${routine.student_id}`)
-    } else {
+  const handleCancel = async () => {
+    if (!routine) {
       navigate('/admin/students')
+      return
     }
+
+    if (routine.status === 'archived') {
+      navigate(`/admin/students/${routine.student_id}`)
+      return
+    }
+
+    const hasChanges = currentFormData && initialFormData
+      ? JSON.stringify(currentFormData) !== JSON.stringify(initialFormData)
+      : false
+
+    if (!hasChanges) {
+      navigate(`/admin/students/${routine.student_id}`)
+      return
+    }
+
+    const shouldCancel = window.confirm('¿Querés cancelar la edición de la rutina? Se van a perder los cambios que hayas hecho.')
+    if (!shouldCancel) return
+
+    if (!routineId || !initialFormData) return
+
+    setSaving(true)
+    setError(null)
+
+    const { error: restoreError } = await updateRoutine(routineId, formDataToUpdateRoutineData(initialFormData))
+    if (restoreError) {
+      setError(restoreError)
+      setSaving(false)
+      return
+    }
+
+    navigate(`/admin/students/${routine.student_id}`)
   }
 
   if (loading) {
@@ -320,6 +290,7 @@ export function RoutineEdit() {
             onSubmit={handleSubmit}
             onAutoSave={handleAutoSave}
             onCancel={handleCancel}
+            onChange={setCurrentFormData}
             isEditing={true}
             routineStatus={routine.status}
             loading={saving}
@@ -328,4 +299,41 @@ export function RoutineEdit() {
       </div>
     </Layout>
   )
+}
+
+function formDataToUpdateRoutineData(formData: RoutineFormData): UpdateRoutineData {
+  return {
+    name: formData.name,
+    total_weeks: formData.total_weeks,
+    days: formData.days.map(day => ({
+      id: day.id,
+      day_number: day.day_number,
+      name: day.name || undefined,
+      blocks: sortFormBlocksByLetter(day.blocks).map((block, blockIndex) => ({
+        id: block.id,
+        block_letter: block.block_letter,
+        block_order: blockIndex,
+        exercises: block.exercises.map(exercise => ({
+          id: exercise.id,
+          exercise_id: exercise.exercise_id,
+          position: exercise.position,
+          note: exercise.note || undefined,
+          sets: exercise.weeks.flatMap(week =>
+            week.sets.map((set, setIndex) => ({
+              id: set.id,
+              week_number: week.week_number,
+              set_number: setIndex + 1,
+              set_type: set.set_type,
+              quantity: set.quantity,
+              weight_kg: set.weight_kg ? parseFloat(set.weight_kg) : undefined,
+            }))
+          ),
+        })),
+      })),
+    })),
+  }
+}
+
+function sortFormBlocksByLetter(blocks: RoutineFormData['days'][number]['blocks']) {
+  return [...blocks].sort((a, b) => a.block_letter.localeCompare(b.block_letter))
 }

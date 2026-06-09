@@ -176,7 +176,9 @@ export function useRoutines(studentId?: string) {
         routineWithDays.routine_days.sort((a: RoutineDay, b: RoutineDay) => a.day_number - b.day_number)
         routineWithDays.routine_days.forEach(day => {
           if (day.routine_blocks) {
-            day.routine_blocks.sort((a: RoutineBlock, b: RoutineBlock) => a.block_order - b.block_order)
+            day.routine_blocks.sort((a: RoutineBlock, b: RoutineBlock) =>
+              a.block_letter.localeCompare(b.block_letter) || a.block_order - b.block_order
+            )
             day.routine_blocks.forEach(block => {
               if (block.block_exercises) {
                 if (!options.includeInactiveBlockExercises) {
@@ -302,7 +304,6 @@ export function useRoutines(studentId?: string) {
       const existingDaysByNumber = new Map(current.data.routine_days.map(day => [day.day_number, day]))
       const existingBlocks = new Map<string, RoutineBlock>()
       const existingBlocksByDayAndLetter = new Map<string, RoutineBlock>()
-      const existingBlocksByDayAndOrder = new Map<string, RoutineBlock>()
       const existingExercises = new Map<string, BlockExercise>()
       const existingExercisesByBlockAndPosition = new Map<string, BlockExercise>()
 
@@ -310,7 +311,6 @@ export function useRoutines(studentId?: string) {
         day.routine_blocks.forEach(block => {
           existingBlocks.set(block.id, block)
           existingBlocksByDayAndLetter.set(`${day.id}:${block.block_letter}`, block)
-          existingBlocksByDayAndOrder.set(`${day.id}:${block.block_order}`, block)
           block.block_exercises.forEach(exercise => {
             existingExercises.set(exercise.id, exercise)
             existingExercisesByBlockAndPosition.set(`${block.id}:${exercise.position}`, exercise)
@@ -321,6 +321,16 @@ export function useRoutines(studentId?: string) {
       const keptDayIds = new Set<string>()
       const keptBlockIds = new Set<string>()
       const keptExerciseIds = new Set<string>()
+      const removedExistingExerciseIds = new Set<string>()
+      const submittedExistingExerciseIds = new Set(
+        data.days.flatMap(day =>
+          day.blocks.flatMap(block =>
+            block.exercises
+              .filter(exercise => existingExercises.has(exercise.id))
+              .map(exercise => exercise.id)
+          )
+        )
+      )
 
       const { error: routineError } = await supabase
         .from('routines')
@@ -331,6 +341,37 @@ export function useRoutines(studentId?: string) {
         .eq('id', routineId)
 
       if (routineError) throw routineError
+
+      if (submittedExistingExerciseIds.size > 0) {
+        for (const [exerciseId] of existingExercises) {
+          if (submittedExistingExerciseIds.has(exerciseId)) continue
+          removedExistingExerciseIds.add(exerciseId)
+
+          const { count, error: countError } = await supabase
+            .from('logged_sets')
+            .select('id', { count: 'exact', head: true })
+            .eq('block_exercise_id', exerciseId)
+
+          if (countError) throw countError
+
+          if ((count || 0) > 0) {
+            const { error: deactivateExerciseError } = await supabase
+              .from('block_exercises')
+              .update({ active: false })
+              .eq('id', exerciseId)
+
+            if (deactivateExerciseError) throw deactivateExerciseError
+            continue
+          }
+
+          const { error: deleteExerciseError } = await supabase
+            .from('block_exercises')
+            .delete()
+            .eq('id', exerciseId)
+
+          if (deleteExerciseError) throw deleteExerciseError
+        }
+      }
 
       for (const day of data.days) {
         const existingDay = existingDays.get(day.id) || existingDaysByNumber.get(day.day_number)
@@ -365,8 +406,7 @@ export function useRoutines(studentId?: string) {
 
         for (const block of day.blocks) {
           const existingBlock = existingBlocks.get(block.id) ||
-            existingBlocksByDayAndLetter.get(`${dayId}:${block.block_letter}`) ||
-            existingBlocksByDayAndOrder.get(`${dayId}:${block.block_order}`)
+            existingBlocksByDayAndLetter.get(`${dayId}:${block.block_letter}`)
           let blockId = existingBlock?.id || block.id
 
           if (existingBlock) {
@@ -398,8 +438,12 @@ export function useRoutines(studentId?: string) {
           keptBlockIds.add(blockId)
 
           for (const exercise of block.exercises) {
-            const existingExercise = existingExercises.get(exercise.id) ||
-              existingExercisesByBlockAndPosition.get(`${blockId}:${exercise.position}`)
+            const existingExerciseById = existingExercises.get(exercise.id)
+            const existingExerciseByPosition = existingExercisesByBlockAndPosition.get(`${blockId}:${exercise.position}`)
+            const existingExercise = existingExerciseById ||
+              (existingExerciseByPosition && !removedExistingExerciseIds.has(existingExerciseByPosition.id)
+                ? existingExerciseByPosition
+                : undefined)
             let blockExerciseId = existingExercise?.id || exercise.id
 
             if (existingExercise) {
@@ -484,6 +528,7 @@ export function useRoutines(studentId?: string) {
       }
 
       for (const [exerciseId] of existingExercises) {
+        if (submittedExistingExerciseIds.size > 0 && !submittedExistingExerciseIds.has(exerciseId)) continue
         if (keptExerciseIds.has(exerciseId)) continue
 
         const { count, error: countError } = await supabase

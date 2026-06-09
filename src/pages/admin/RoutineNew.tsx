@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Layout } from '../../components/layout/Layout'
 import { RoutineForm } from '../../components/admin/RoutineForm'
@@ -29,6 +29,31 @@ export function RoutineNew() {
   const [formKey, setFormKey] = useState(0)
   const [autoSavedRoutineId, setAutoSavedRoutineId] = useState<string | null>(null)
   const [dismissedDraftId, setDismissedDraftId] = useState<string | null>(null)
+  const autoSavedRoutineIdRef = useRef<string | null>(null)
+  const createDraftPromiseRef = useRef<Promise<string> | null>(null)
+
+  const setAutoSavedDraftId = useCallback((routineId: string) => {
+    autoSavedRoutineIdRef.current = routineId
+    setAutoSavedRoutineId(routineId)
+  }, [])
+
+  const createDraftRoutine = useCallback((formData: RoutineFormData, fallbackError: string) => {
+    if (createDraftPromiseRef.current) return createDraftPromiseRef.current
+    if (!user) return Promise.reject(new Error(fallbackError))
+
+    const createPromise = createRoutine(formDataToCreateRoutineData(formData), user.id)
+      .then(({ data: routine, error }) => {
+        if (error || !routine) throw new Error(error || fallbackError)
+        setAutoSavedDraftId(routine.id)
+        return routine.id
+      })
+      .finally(() => {
+        createDraftPromiseRef.current = null
+      })
+
+    createDraftPromiseRef.current = createPromise
+    return createPromise
+  }, [createRoutine, setAutoSavedDraftId, user])
 
   const selectedStudentId = currentFormData?.student_id || initialFormData?.student_id || studentId
   const existingDraft = selectedStudentId
@@ -47,24 +72,17 @@ export function RoutineNew() {
     setError(null)
 
     try {
-      let routineId = autoSavedRoutineId
+      let routineId = autoSavedRoutineIdRef.current
 
-      if (routineId) {
-        const { error: updateError } = await updateRoutine(routineId, formDataToUpdateRoutineData(formData))
-        if (updateError) {
-          setError(updateError)
-          setLoading(false)
-          return
-        }
-      } else {
-        const { data: routine, error: createError } = await createRoutine(formDataToCreateRoutineData(formData), user.id)
-        if (createError || !routine) {
-          setError(createError || 'No se pudo crear la rutina')
-          setLoading(false)
-          return
-        }
-        routineId = routine.id
-        setAutoSavedRoutineId(routine.id)
+      if (!routineId) {
+        routineId = await createDraftRoutine(formData, 'No se pudo crear la rutina')
+      }
+
+      const { error: updateError } = await updateRoutine(routineId, formDataToUpdateRoutineData(formData))
+      if (updateError) {
+        setError(updateError)
+        setLoading(false)
+        return
       }
 
       if (routineId && action === 'active') {
@@ -87,18 +105,21 @@ export function RoutineNew() {
   const handleAutoSave = useCallback(async (formData: RoutineFormData) => {
     if (!user) return
 
-    if (autoSavedRoutineId) {
-      const { error } = await updateRoutine(autoSavedRoutineId, formDataToUpdateRoutineData(formData))
+    const routineId = autoSavedRoutineIdRef.current
+    if (routineId) {
+      const { error } = await updateRoutine(routineId, formDataToUpdateRoutineData(formData))
       if (error) throw new Error(error)
       return
     }
 
-    const { data: routine, error } = await createRoutine(formDataToCreateRoutineData(formData), user.id)
-    if (error || !routine) throw new Error(error || 'No se pudo crear el borrador')
+    const createInFlight = Boolean(createDraftPromiseRef.current)
+    const createdRoutineId = await createDraftRoutine(formData, 'No se pudo crear el borrador')
 
-    setAutoSavedRoutineId(routine.id)
-    navigate(`/admin/routines/${routine.id}/edit`, { replace: true })
-  }, [autoSavedRoutineId, createRoutine, navigate, updateRoutine, user])
+    if (createInFlight) {
+      const { error } = await updateRoutine(createdRoutineId, formDataToUpdateRoutineData(formData))
+      if (error) throw new Error(error)
+    }
+  }, [createDraftRoutine, updateRoutine, user])
 
   const handleCancel = () => {
     if (studentId) {
@@ -157,7 +178,7 @@ export function RoutineNew() {
     }
 
     const draftFormData = dbRoutineToFormData(data)
-    setAutoSavedRoutineId(existingDraft.id)
+    setAutoSavedDraftId(existingDraft.id)
     setInitialFormData(draftFormData)
     setCurrentFormData(draftFormData)
     setFormKey(prev => prev + 1)
@@ -412,9 +433,9 @@ function formDataToCreateRoutineData(formData: RoutineFormData): CreateRoutineDa
     days: formData.days.map(day => ({
       day_number: day.day_number,
       name: day.name || undefined,
-      blocks: day.blocks.map(block => ({
+      blocks: sortFormBlocksByLetter(day.blocks).map((block, blockIndex) => ({
         block_letter: block.block_letter,
-        block_order: block.block_order,
+        block_order: blockIndex,
         exercises: block.exercises.map(exercise => ({
           exercise_id: exercise.exercise_id,
           position: exercise.position,
@@ -442,10 +463,10 @@ function formDataToUpdateRoutineData(formData: RoutineFormData): UpdateRoutineDa
       id: day.id,
       day_number: day.day_number,
       name: day.name || undefined,
-      blocks: day.blocks.map(block => ({
+      blocks: sortFormBlocksByLetter(day.blocks).map((block, blockIndex) => ({
         id: block.id,
         block_letter: block.block_letter,
-        block_order: block.block_order,
+        block_order: blockIndex,
         exercises: block.exercises.map(exercise => ({
           id: exercise.id,
           exercise_id: exercise.exercise_id,
@@ -465,6 +486,10 @@ function formDataToUpdateRoutineData(formData: RoutineFormData): UpdateRoutineDa
       })),
     })),
   }
+}
+
+function sortFormBlocksByLetter(blocks: RoutineFormData['days'][number]['blocks']) {
+  return [...blocks].sort((a, b) => a.block_letter.localeCompare(b.block_letter))
 }
 
 function formHasData(formData: RoutineFormData | null, initialStudentId?: string) {
