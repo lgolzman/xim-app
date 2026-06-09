@@ -3,13 +3,15 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Modal } from '../ui/Modal'
+import { ExerciseForm } from '../exercises/ExerciseForm'
 import { useStudents } from '../../hooks/useStudents'
 import { useExercises } from '../../hooks/useExercises'
 import { useMovementPatterns } from '../../hooks/useMovementPatterns'
 import { useDirections } from '../../hooks/useDirections'
+import { useMuscles } from '../../hooks/useMuscles'
 import { getBlockColor } from '../../lib/blockColors'
 import { supabase } from '../../lib/supabase'
-import type { ChainType, Exercise, ExerciseInRoutine, LoggedSet, PrescribedSet, SetType } from '../../lib/types'
+import type { ChainType, Exercise, ExerciseFormData, ExerciseInRoutine, LoggedSet, PrescribedSet, SetType } from '../../lib/types'
 
 // Tipos internos para el formulario
 interface FormSet {
@@ -95,6 +97,7 @@ const ROUTINE_EDITOR_VIEW_KEY = 'xim_routine_editor_view'
 const AUTO_SAVE_DEBOUNCE_MS = 15000
 
 type RoutineEditorView = 'compact' | 'detailed'
+type ExerciseModalMode = 'select' | 'create'
 
 // Generar ID único
 const generateId = () => Math.random().toString(36).substring(2, 11)
@@ -205,9 +208,10 @@ export function RoutineForm({
   loading = false,
 }: RoutineFormProps) {
   const { students, loading: studentsLoading } = useStudents()
-  const { exercises, loading: exercisesLoading } = useExercises()
+  const { exercises, loading: exercisesLoading, createExercise } = useExercises()
   const { patterns } = useMovementPatterns()
   const { directions } = useDirections()
+  const { muscles } = useMuscles()
 
   const [formData, setFormData] = useState<FormData>(() => {
     if (initialData) return initialData
@@ -231,6 +235,7 @@ export function RoutineForm({
   const [editorView, setEditorView] = useState<RoutineEditorView>(getInitialEditorView)
 
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false)
+  const [exerciseModalMode, setExerciseModalMode] = useState<ExerciseModalMode>('select')
   const [currentDayIndex, setCurrentDayIndex] = useState<number | null>(null)
   const [currentBlockIndex, setCurrentBlockIndex] = useState<number | null>(null)
   const [exerciseSearch, setExerciseSearch] = useState('')
@@ -240,6 +245,8 @@ export function RoutineForm({
   const [exerciseHistory, setExerciseHistory] = useState<Record<string, LastExerciseExecution>>({})
   const [exerciseHistoryLoading, setExerciseHistoryLoading] = useState(false)
   const [exerciseHistoryError, setExerciseHistoryError] = useState<string | null>(null)
+  const [exerciseCreateSaving, setExerciseCreateSaving] = useState(false)
+  const [exerciseCreateError, setExerciseCreateError] = useState<string | null>(null)
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [autoSavedAt, setAutoSavedAt] = useState<Date | null>(null)
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null)
@@ -512,6 +519,13 @@ export function RoutineForm({
     setExerciseChainFilter('')
   }
 
+  const closeExerciseModal = () => {
+    setExerciseModalOpen(false)
+    setExerciseModalMode('select')
+    setExerciseCreateError(null)
+    setExerciseCreateSaving(false)
+  }
+
   const handleEditorViewChange = (view: RoutineEditorView) => {
     setEditorView(view)
     window.localStorage.setItem(ROUTINE_EDITOR_VIEW_KEY, view)
@@ -636,6 +650,8 @@ export function RoutineForm({
     setCurrentDayIndex(dayIndex)
     setCurrentBlockIndex(blockIndex)
     clearExerciseFilters()
+    setExerciseModalMode('select')
+    setExerciseCreateError(null)
     setExerciseModalOpen(true)
   }
 
@@ -672,6 +688,31 @@ export function RoutineForm({
     }))
 
     setExerciseModalOpen(false)
+  }
+
+  const handleCreateExercise = async (data: ExerciseFormData) => {
+    setExerciseCreateSaving(true)
+    setExerciseCreateError(null)
+
+    try {
+      const { data: createdExercise, error } = await createExercise(data)
+
+      if (error) {
+        setExerciseCreateError(error)
+        return
+      }
+
+      if (!createdExercise) {
+        setExerciseCreateError('No se pudo agregar el ejercicio creado a la rutina')
+        return
+      }
+
+      addExercise(createdExercise)
+    } catch (err) {
+      setExerciseCreateError(err instanceof Error ? err.message : 'Error inesperado al crear ejercicio')
+    } finally {
+      setExerciseCreateSaving(false)
+    }
   }
 
   // Eliminar ejercicio
@@ -1522,104 +1563,143 @@ export function RoutineForm({
       {/* Modal de selección de ejercicio */}
       <Modal
         isOpen={exerciseModalOpen}
-        onClose={() => setExerciseModalOpen(false)}
-        title="Seleccionar ejercicio"
-        size="lg"
+        onClose={closeExerciseModal}
+        title={exerciseModalMode === 'create' ? 'Nuevo ejercicio' : 'Seleccionar ejercicio'}
+        size={exerciseModalMode === 'create' ? 'xl' : 'lg'}
       >
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Select
-              label="Patrón de movimiento"
-              value={exercisePatternFilter}
-              onChange={(e) => setExercisePatternFilter(e.target.value)}
-              options={patterns.map(pattern => ({ value: pattern.id, label: pattern.name }))}
-              placeholder="Todos"
-            />
-            <Select
-              label="Dirección"
-              value={exerciseDirectionFilter}
-              onChange={(e) => setExerciseDirectionFilter(e.target.value)}
-              options={directions.map(direction => ({ value: direction.id, label: direction.name }))}
-              placeholder="Todas"
-            />
-            <Select
-              label="Tipo de cadena"
-              value={exerciseChainFilter}
-              onChange={(e) => setExerciseChainFilter(e.target.value as ChainType | '')}
-              options={[
-                { value: 'abierta', label: 'Abierta' },
-                { value: 'cerrada', label: 'Cerrada' },
-              ]}
-              placeholder="Todas"
-            />
-          </div>
-
-          <Input
-            value={exerciseSearch}
-            onChange={(e) => setExerciseSearch(e.target.value)}
-            placeholder="Buscar ejercicio..."
-          />
-
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-gray-500">
-              {filteredExercises.length} de {exercises.length} ejercicios
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={clearExerciseFilters}
-              disabled={!hasExerciseFilters}
-            >
-              Limpiar filtros
-            </Button>
-          </div>
-
-          {selectedStudentId && exerciseHistoryLoading && (
-            <p className="text-sm text-gray-500">Cargando historial del alumno...</p>
-          )}
-          {exerciseHistoryError && (
-            <p className="text-sm text-red-600">{exerciseHistoryError}</p>
-          )}
-
-          <div className="max-h-96 overflow-y-auto space-y-1">
-            {exercisesLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+        {exerciseModalMode === 'create' ? (
+          <div className="space-y-4">
+            {exerciseCreateError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {exerciseCreateError}
               </div>
-            ) : filteredExercises.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No se encontraron ejercicios</p>
-            ) : (
-              filteredExercises.map(exercise => {
-                const lastExecution = exerciseHistory[exercise.id]
-
-                return (
-                  <button
-                    key={exercise.id}
-                    onClick={() => addExercise(exercise)}
-                    className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition-colors"
-                  >
-                    <span className="font-medium text-gray-900">{exercise.name}</span>
-                    {exercise.movement_pattern && (
-                      <span className="text-sm text-gray-500 ml-2">
-                        ({exercise.movement_pattern.name})
-                      </span>
-                    )}
-                    {lastExecution && (
-                      <span className="mt-1 block text-xs leading-5 text-gray-500">
-                        <span className="block">
-                          Última vez: Semana {lastExecution.week_number} — {lastExecution.routine_name} — {new Date(lastExecution.completed_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </span>
-                        <span className="block">Prescripto: {lastExecution.prescribed}</span>
-                        <span className="block">Registrado: {lastExecution.registered}</span>
-                      </span>
-                    )}
-                  </button>
-                )
-              })
             )}
+            <ExerciseForm
+              exercise={null}
+              onSubmit={handleCreateExercise}
+              onCancel={() => {
+                setExerciseModalMode('select')
+                setExerciseCreateError(null)
+              }}
+              loading={exerciseCreateSaving}
+              patterns={patterns}
+              directions={directions}
+              muscles={muscles}
+              initialName={exerciseSearch.trim()}
+              initialMovementPatternId={exercisePatternFilter}
+              initialDirectionId={exerciseDirectionFilter}
+              initialChainType={exerciseChainFilter}
+            />
           </div>
-        </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Select
+                label="Patrón de movimiento"
+                value={exercisePatternFilter}
+                onChange={(e) => setExercisePatternFilter(e.target.value)}
+                options={patterns.map(pattern => ({ value: pattern.id, label: pattern.name }))}
+                placeholder="Todos"
+              />
+              <Select
+                label="Dirección"
+                value={exerciseDirectionFilter}
+                onChange={(e) => setExerciseDirectionFilter(e.target.value)}
+                options={directions.map(direction => ({ value: direction.id, label: direction.name }))}
+                placeholder="Todas"
+              />
+              <Select
+                label="Tipo de cadena"
+                value={exerciseChainFilter}
+                onChange={(e) => setExerciseChainFilter(e.target.value as ChainType | '')}
+                options={[
+                  { value: 'abierta', label: 'Abierta' },
+                  { value: 'cerrada', label: 'Cerrada' },
+                ]}
+                placeholder="Todas"
+              />
+            </div>
+
+            <Input
+              value={exerciseSearch}
+              onChange={(e) => setExerciseSearch(e.target.value)}
+              placeholder="Buscar ejercicio..."
+            />
+
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <span className="text-gray-500">
+                {filteredExercises.length} de {exercises.length} ejercicios
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={clearExerciseFilters}
+                  disabled={!hasExerciseFilters}
+                >
+                  Limpiar filtros
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setExerciseCreateError(null)
+                    setExerciseModalMode('create')
+                  }}
+                >
+                  + Nuevo ejercicio
+                </Button>
+              </div>
+            </div>
+
+            {selectedStudentId && exerciseHistoryLoading && (
+              <p className="text-sm text-gray-500">Cargando historial del alumno...</p>
+            )}
+            {exerciseHistoryError && (
+              <p className="text-sm text-red-600">{exerciseHistoryError}</p>
+            )}
+
+            <div className="max-h-96 overflow-y-auto space-y-1">
+              {exercisesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                </div>
+              ) : filteredExercises.length === 0 ? (
+                <p className="text-gray-500 text-center py-4">No se encontraron ejercicios</p>
+              ) : (
+                filteredExercises.map(exercise => {
+                  const lastExecution = exerciseHistory[exercise.id]
+
+                  return (
+                    <button
+                      key={exercise.id}
+                      onClick={() => addExercise(exercise)}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-gray-100 transition-colors"
+                    >
+                      <span className="font-medium text-gray-900">{exercise.name}</span>
+                      {exercise.movement_pattern && (
+                        <span className="text-sm text-gray-500 ml-2">
+                          ({exercise.movement_pattern.name})
+                        </span>
+                      )}
+                      {lastExecution && (
+                        <span className="mt-1 block text-xs leading-5 text-gray-500">
+                          <span className="block">
+                            Última vez: Semana {lastExecution.week_number} — {lastExecution.routine_name} — {new Date(lastExecution.completed_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                          <span className="block">Prescripto: {lastExecution.prescribed}</span>
+                          <span className="block">Registrado: {lastExecution.registered}</span>
+                        </span>
+                      )}
+                    </button>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )
