@@ -83,7 +83,7 @@ interface RoutineFormProps {
   studentId?: string // Pre-selected student
   onSubmit: (data: FormData, action: 'draft' | 'active') => Promise<void>
   onAutoSave?: (data: FormData) => Promise<void>
-  onCancel: () => void
+  onCancel: () => void | Promise<void>
   onChange?: (data: FormData) => void
   isEditing?: boolean
   routineStatus?: 'draft' | 'active' | 'archived'
@@ -91,9 +91,24 @@ interface RoutineFormProps {
 }
 
 const BLOCK_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+const ROUTINE_EDITOR_VIEW_KEY = 'xim_routine_editor_view'
+const AUTO_SAVE_DEBOUNCE_MS = 15000
+
+type RoutineEditorView = 'compact' | 'detailed'
 
 // Generar ID único
 const generateId = () => Math.random().toString(36).substring(2, 11)
+
+const getInitialEditorView = (): RoutineEditorView => {
+  if (typeof window === 'undefined') return 'detailed'
+  return window.localStorage.getItem(ROUTINE_EDITOR_VIEW_KEY) === 'compact' ? 'compact' : 'detailed'
+}
+
+const sortBlocksByLetter = (blocks: FormBlock[]) => {
+  return [...blocks]
+    .sort((a, b) => a.block_letter.localeCompare(b.block_letter))
+    .map((block, index) => ({ ...block, block_order: index }))
+}
 
 // Crear sets vacíos para una semana
 const createEmptySets = (count: number = 3): FormSet[] => {
@@ -213,6 +228,7 @@ export function RoutineForm({
       }],
     }
   })
+  const [editorView, setEditorView] = useState<RoutineEditorView>(getInitialEditorView)
 
   const [exerciseModalOpen, setExerciseModalOpen] = useState(false)
   const [currentDayIndex, setCurrentDayIndex] = useState<number | null>(null)
@@ -235,7 +251,9 @@ export function RoutineForm({
   })
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoSaveInFlightRef = useRef(false)
+  const autoSavePendingRef = useRef(false)
   const autoSavePromiseRef = useRef<Promise<void> | null>(null)
+  const latestFormDataRef = useRef(formData)
   const onAutoSaveRef = useRef(onAutoSave)
   const didMountRef = useRef(false)
   const isActiveRoutine = routineStatus === 'active'
@@ -257,12 +275,48 @@ export function RoutineForm({
   }, [formData])
 
   useEffect(() => {
+    latestFormDataRef.current = formData
     onChange?.(formData)
   }, [formData, onChange])
 
   useEffect(() => {
     onAutoSaveRef.current = onAutoSave
   }, [onAutoSave])
+
+  const runAutoSave = useCallback((data: FormData) => {
+    if (!onAutoSaveRef.current) return
+
+    if (autoSaveInFlightRef.current) {
+      autoSavePendingRef.current = true
+      return
+    }
+
+    autoSaveInFlightRef.current = true
+    setAutoSaveStatus('saving')
+    setAutoSaveError(null)
+
+    const autoSavePromise = onAutoSaveRef.current(data)
+    autoSavePromiseRef.current = autoSavePromise
+
+    autoSavePromise
+      .then(() => {
+        setAutoSaveStatus('saved')
+        setAutoSavedAt(new Date())
+      })
+      .catch((err) => {
+        setAutoSaveError(err instanceof Error ? err.message : 'No se pudo guardar el borrador')
+        setAutoSaveStatus('error')
+      })
+      .finally(() => {
+        autoSaveInFlightRef.current = false
+        autoSavePromiseRef.current = null
+
+        if (autoSavePendingRef.current) {
+          autoSavePendingRef.current = false
+          runAutoSave(latestFormDataRef.current)
+        }
+      })
+  }, [])
 
   useEffect(() => {
     if (!hasAutoSave || isArchivedRoutine || loading) return
@@ -282,35 +336,15 @@ export function RoutineForm({
     }
 
     autoSaveTimerRef.current = setTimeout(() => {
-      if (autoSaveInFlightRef.current || !onAutoSaveRef.current) return
-
-      autoSaveInFlightRef.current = true
-      setAutoSaveStatus('saving')
-      setAutoSaveError(null)
-      const autoSavePromise = onAutoSaveRef.current(formData)
-      autoSavePromiseRef.current = autoSavePromise
-
-      autoSavePromise
-        .then(() => {
-          setAutoSaveStatus('saved')
-          setAutoSavedAt(new Date())
-        })
-        .catch((err) => {
-          setAutoSaveError(err instanceof Error ? err.message : 'No se pudo guardar el borrador')
-          setAutoSaveStatus('error')
-        })
-        .finally(() => {
-          autoSaveInFlightRef.current = false
-          autoSavePromiseRef.current = null
-        })
-    }, 3000)
+      runAutoSave(formData)
+    }, AUTO_SAVE_DEBOUNCE_MS)
 
     return () => {
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current)
       }
     }
-  }, [formData, hasAutoSave, isArchivedRoutine, isValid, loading])
+  }, [formData, hasAutoSave, isArchivedRoutine, isValid, loading, runAutoSave])
 
   const selectedStudentId = studentId || formData.student_id
 
@@ -329,6 +363,21 @@ export function RoutineForm({
       setExerciseHistoryError(null)
 
       try {
+        const { data: latestLog, error: latestLogError } = await supabase
+          .from('workout_logs')
+          .select('id')
+          .eq('student_id', selectedStudentId)
+          .order('completed_at', { ascending: false })
+          .limit(1)
+
+        if (latestLogError) throw latestLogError
+        if (isCancelled) return
+
+        if (!latestLog || latestLog.length === 0) {
+          setExerciseHistory({})
+          return
+        }
+
         const { data, error } = await supabase
           .from('workout_logs')
           .select(`
@@ -376,9 +425,10 @@ export function RoutineForm({
         })
 
         setExerciseHistory(historyByExercise)
-      } catch (err) {
+      } catch {
         if (!isCancelled) {
-          setExerciseHistoryError(err instanceof Error ? err.message : 'Error al cargar historial')
+          setExerciseHistory({})
+          setExerciseHistoryError(null)
         }
       } finally {
         if (!isCancelled) {
@@ -460,6 +510,11 @@ export function RoutineForm({
     setExercisePatternFilter('')
     setExerciseDirectionFilter('')
     setExerciseChainFilter('')
+  }
+
+  const handleEditorViewChange = (view: RoutineEditorView) => {
+    setEditorView(view)
+    window.localStorage.setItem(ROUTINE_EDITOR_VIEW_KEY, view)
   }
 
   // Cambiar total de semanas - ajusta los sets de todos los ejercicios
@@ -546,12 +601,12 @@ export function RoutineForm({
         if (i !== dayIndex) return d
         return {
           ...d,
-          blocks: [...d.blocks, {
+          blocks: sortBlocksByLetter([...d.blocks, {
             id: generateId(),
             block_letter: nextLetter,
-            block_order: d.blocks.length,
+            block_order: 0,
             exercises: [],
-          }],
+          }]),
         }
       }),
     }))
@@ -568,9 +623,7 @@ export function RoutineForm({
         if (i !== dayIndex) return d
         return {
           ...d,
-          blocks: d.blocks
-            .filter((_, bi) => bi !== blockIndex)
-            .map((b, bi) => ({ ...b, block_order: bi })),
+          blocks: sortBlocksByLetter(d.blocks.filter((_, bi) => bi !== blockIndex)),
         }
       }),
     }))
@@ -970,6 +1023,16 @@ export function RoutineForm({
     await onSubmit(formData, action)
   }
 
+  const handleCancel = async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+    if (autoSavePromiseRef.current) {
+      await autoSavePromiseRef.current.catch(() => undefined)
+    }
+    await onCancel()
+  }
+
   return (
     <div className="space-y-6">
       {onAutoSave && !isArchivedRoutine && (
@@ -984,7 +1047,39 @@ export function RoutineForm({
 
       {/* Datos básicos */}
       <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Datos de la rutina</h3>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Datos de la rutina</h3>
+          <div
+            className="inline-flex w-full rounded-lg border border-gray-200 bg-gray-50 p-1 sm:w-auto"
+            role="group"
+            aria-label="Vista del editor"
+          >
+            <button
+              type="button"
+              onClick={() => handleEditorViewChange('detailed')}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors sm:flex-none ${
+                editorView === 'detailed'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              aria-pressed={editorView === 'detailed'}
+            >
+              Detallada
+            </button>
+            <button
+              type="button"
+              onClick={() => handleEditorViewChange('compact')}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors sm:flex-none ${
+                editorView === 'compact'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              aria-pressed={editorView === 'compact'}
+            >
+              Compacta
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {!isEditing && (
             <Select
@@ -1113,13 +1208,13 @@ export function RoutineForm({
 
               {/* Bloques */}
               {!isCollapsed && (
-                <div className="p-4 space-y-4">
+                <div className={editorView === 'compact' ? 'p-2 space-y-2' : 'p-4 space-y-4'}>
                 {day.blocks.map((block, blockIndex) => {
                   const blockColor = getBlockColor(block.block_letter)
 
                   return (
                   <div key={block.id} className={`border ${blockColor.border} ${blockColor.bg} rounded-lg`}>
-                    <div className="px-3 py-2 flex items-center justify-between rounded-t-lg">
+                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? 'py-1.5' : 'py-2'}`}>
                       <span className="font-medium text-gray-700">Bloque {block.block_letter}</span>
                       <div className="flex items-center gap-2">
                         <Button
@@ -1144,13 +1239,38 @@ export function RoutineForm({
                     </div>
 
                     {/* Ejercicios del bloque */}
-                    <div className="p-3 space-y-3">
+                    <div className={editorView === 'compact' ? 'px-2 pb-2 space-y-1' : 'p-3 space-y-3'}>
                       {block.exercises.length === 0 ? (
-                        <p className="text-gray-400 text-sm text-center py-2">
+                        <p className={`text-gray-400 text-sm text-center ${editorView === 'compact' ? 'py-1.5' : 'py-2'}`}>
                           {hasRoutineName
-                            ? 'Sin ejercicios. Agregá uno con el botón + Ejercicio.'
+                            ? editorView === 'compact' ? 'Sin ejercicios' : 'Sin ejercicios. Agregá uno con el botón + Ejercicio.'
                             : 'Sin ejercicios. Primero completá el nombre de la rutina.'}
                         </p>
+                      ) : editorView === 'compact' ? (
+                        <div className="space-y-1">
+                          {block.exercises.map((exercise, exerciseIndex) => (
+                            <div
+                              key={exercise.id}
+                              className="flex min-h-8 items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm"
+                            >
+                              <span className="w-8 shrink-0 text-xs font-semibold text-gray-500">
+                                {block.block_letter}{exercise.position}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate font-medium text-gray-900">
+                                {exercise.exercise?.name || 'Ejercicio'}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 shrink-0 px-2 py-0 text-red-600"
+                                onClick={() => removeExercise(dayIndex, blockIndex, exerciseIndex)}
+                                aria-label={`Eliminar ${exercise.exercise?.name || 'ejercicio'}`}
+                              >
+                                ×
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
                       ) : (
                         block.exercises.map((exercise, exerciseIndex) => {
                           const selectedWeek = getSelectedWeek(exercise)
@@ -1356,7 +1476,7 @@ export function RoutineForm({
 
       {/* Acciones */}
       <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-        <Button variant="secondary" onClick={onCancel} disabled={loading}>
+        <Button variant="secondary" onClick={handleCancel} disabled={loading}>
           Cancelar
         </Button>
         {isActiveRoutine ? (
