@@ -15,6 +15,10 @@ interface ExerciseFormProps {
   patterns: MovementPattern[]
   directions: Direction[]
   muscles: Muscle[]
+  initialName?: string
+  initialMovementPatternId?: string
+  initialDirectionId?: string
+  initialChainType?: ChainType | ''
 }
 
 interface PhotoSlot {
@@ -30,7 +34,19 @@ const PHOTO_ORDERS: Array<1 | 2 | 3> = [1, 2, 3]
 const ACCEPTED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_PHOTO_SIZE = 5 * 1024 * 1024
 
-export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, directions, muscles }: ExerciseFormProps) {
+export function ExerciseForm({
+  exercise,
+  onSubmit,
+  onCancel,
+  loading,
+  patterns,
+  directions,
+  muscles,
+  initialName = '',
+  initialMovementPatternId = '',
+  initialDirectionId = '',
+  initialChainType = '',
+}: ExerciseFormProps) {
 
   const [name, setName] = useState('')
   const [movementPatternId, setMovementPatternId] = useState('')
@@ -80,10 +96,10 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, 
         error: null,
       })))
     } else {
-      setName('')
-      setMovementPatternId('')
-      setDirectionId('')
-      setChainType('')
+      setName(initialName)
+      setMovementPatternId(initialMovementPatternId)
+      setDirectionId(initialDirectionId)
+      setChainType(initialChainType)
       setExecutionTips('')
       setPrimaryMuscleIds([])
       setSynergistMuscleIds([])
@@ -97,7 +113,7 @@ export function ExerciseForm({ exercise, onSubmit, onCancel, loading, patterns, 
         error: null,
       })))
     }
-  }, [exercise])
+  }, [exercise, initialChainType, initialDirectionId, initialMovementPatternId, initialName])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {

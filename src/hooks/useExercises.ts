@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import type { ExerciseWithRelations, ExerciseFormData, Exercise } from '../lib/types'
+import type { Direction, ExerciseWithRelations, ExerciseFormData, Exercise, MovementPattern, Muscle } from '../lib/types'
 import { deleteExercisePhoto, uploadExercisePhoto, withPhotoPublicUrl } from './useExercisePhotos'
 
 const buildExercisePayload = (data: ExerciseFormData) => ({
@@ -10,6 +10,75 @@ const buildExercisePayload = (data: ExerciseFormData) => ({
   chain_type: data.chain_type || null,
   execution_tips: data.execution_tips.trim() || null,
 })
+
+type ExerciseRelationsRow = Exercise & {
+  movement_pattern?: MovementPattern | null
+  direction?: Direction | null
+}
+
+type MuscleRelationRow = {
+  muscle: Muscle | Muscle[] | null
+}
+
+const normalizeMuscleRows = (rows: MuscleRelationRow[]) => {
+  return rows.flatMap(row => {
+    if (!row.muscle) return []
+    return Array.isArray(row.muscle) ? row.muscle : [row.muscle]
+  })
+}
+
+const loadExerciseRelations = async (exercise: ExerciseRelationsRow): Promise<ExerciseWithRelations> => {
+  const primaryMusclesQuery = supabase
+    .from('exercise_primary_muscles')
+    .select('muscle:muscles(*)')
+    .eq('exercise_id', exercise.id)
+  const synergistMusclesQuery = supabase
+    .from('exercise_synergist_muscles')
+    .select('muscle:muscles(*)')
+    .eq('exercise_id', exercise.id)
+  const videosQuery = supabase
+    .from('exercise_videos')
+    .select('*')
+    .eq('exercise_id', exercise.id)
+  const photosQuery = supabase
+    .from('exercise_photos')
+    .select('*')
+    .eq('exercise_id', exercise.id)
+    .order('display_order')
+
+  const [primaryMuscles, synergistMuscles, videos, photos] = await Promise.all([
+    primaryMusclesQuery,
+    synergistMusclesQuery,
+    videosQuery,
+    photosQuery,
+  ])
+
+  const primaryMuscleRows = (primaryMuscles.data || []) as unknown as MuscleRelationRow[]
+  const synergistMuscleRows = (synergistMuscles.data || []) as unknown as MuscleRelationRow[]
+
+  return {
+    ...exercise,
+    primary_muscles: normalizeMuscleRows(primaryMuscleRows),
+    synergist_muscles: normalizeMuscleRows(synergistMuscleRows),
+    videos: videos.data || [],
+    photos: photos.data?.map(withPhotoPublicUrl) || [],
+  } as ExerciseWithRelations
+}
+
+const getExerciseWithRelations = async (id: string) => {
+  const { data, error } = await supabase
+    .from('exercises')
+    .select(`
+      *,
+      movement_pattern:movement_patterns(*),
+      direction:directions(*)
+    `)
+    .eq('id', id)
+    .single()
+
+  if (error) throw error
+  return loadExerciseRelations(data)
+}
 
 export function useExercises() {
   const [exercises, setExercises] = useState<ExerciseWithRelations[]>([])
@@ -36,42 +105,7 @@ export function useExercises() {
 
       if (exercisesError) throw exercisesError
 
-      const exercisesWithMuscles = await Promise.all(
-        (exercisesData || []).map(async (exercise: any) => {
-          const primaryMusclesQuery = supabase
-            .from('exercise_primary_muscles')
-            .select('muscle:muscles(*)')
-            .eq('exercise_id', exercise.id)
-          const synergistMusclesQuery = supabase
-            .from('exercise_synergist_muscles')
-            .select('muscle:muscles(*)')
-            .eq('exercise_id', exercise.id)
-          const videosQuery = supabase
-            .from('exercise_videos')
-            .select('*')
-            .eq('exercise_id', exercise.id)
-          const photosQuery = supabase
-            .from('exercise_photos')
-            .select('*')
-            .eq('exercise_id', exercise.id)
-            .order('display_order')
-
-          const [primaryMuscles, synergistMuscles, videos, photos] = await Promise.all([
-            primaryMusclesQuery,
-            synergistMusclesQuery,
-            videosQuery,
-            photosQuery,
-          ])
-
-          return {
-            ...exercise,
-            primary_muscles: primaryMuscles.data?.map((pm: any) => pm.muscle) || [],
-            synergist_muscles: synergistMuscles.data?.map((sm: any) => sm.muscle) || [],
-            videos: videos.data || [],
-            photos: photos.data?.map(withPhotoPublicUrl) || [],
-          } as ExerciseWithRelations
-        })
-      )
+      const exercisesWithMuscles = await Promise.all((exercisesData || []).map(loadExerciseRelations))
 
       if (!isMountedRef.current) return
       setExercises(exercisesWithMuscles)
@@ -110,37 +144,31 @@ export function useExercises() {
       if (data.primary_muscle_ids.length > 0) {
         const { error: pmError } = await supabase
           .from('exercise_primary_muscles')
-          .insert(
-            data.primary_muscle_ids.map((muscle_id) => ({
-              exercise_id: newExercise.id,
-              muscle_id,
-            })) as any
-          )
+          .insert(data.primary_muscle_ids.map((muscle_id) => ({
+            exercise_id: newExercise.id,
+            muscle_id,
+          })))
         if (pmError) throw pmError
       }
 
       if (data.synergist_muscle_ids.length > 0) {
         const { error: smError } = await supabase
           .from('exercise_synergist_muscles')
-          .insert(
-            data.synergist_muscle_ids.map((muscle_id) => ({
-              exercise_id: newExercise.id,
-              muscle_id,
-            })) as any
-          )
+          .insert(data.synergist_muscle_ids.map((muscle_id) => ({
+            exercise_id: newExercise.id,
+            muscle_id,
+          })))
         if (smError) throw smError
       }
 
       if (data.videos.length > 0) {
         const { error: vidError } = await supabase
           .from('exercise_videos')
-          .insert(
-            data.videos.map((video) => ({
-              exercise_id: newExercise.id,
-              url: video.url,
-              title: video.title || null,
-            })) as any
-          )
+          .insert(data.videos.map((video) => ({
+            exercise_id: newExercise.id,
+            url: video.url,
+            title: video.title || null,
+          })))
         if (vidError) throw vidError
       }
 
@@ -148,10 +176,11 @@ export function useExercises() {
         await uploadExercisePhoto(newExercise.id, photo.file, photo.order)
       }
 
+      const createdExercise = await getExerciseWithRelations(newExercise.id)
       await fetchExercises()
-      return { error: null }
+      return { data: createdExercise, error: null }
     } catch (err) {
-      return { error: err instanceof Error ? err.message : 'Error al crear ejercicio' }
+      return { data: null, error: err instanceof Error ? err.message : 'Error al crear ejercicio' }
     }
   }
 
@@ -171,37 +200,31 @@ export function useExercises() {
       if (data.primary_muscle_ids.length > 0) {
         const { error: pmError } = await supabase
           .from('exercise_primary_muscles')
-          .insert(
-            data.primary_muscle_ids.map((muscle_id) => ({
-              exercise_id: id,
-              muscle_id,
-            })) as any
-          )
+          .insert(data.primary_muscle_ids.map((muscle_id) => ({
+            exercise_id: id,
+            muscle_id,
+          })))
         if (pmError) throw pmError
       }
 
       if (data.synergist_muscle_ids.length > 0) {
         const { error: smError } = await supabase
           .from('exercise_synergist_muscles')
-          .insert(
-            data.synergist_muscle_ids.map((muscle_id) => ({
-              exercise_id: id,
-              muscle_id,
-            })) as any
-          )
+          .insert(data.synergist_muscle_ids.map((muscle_id) => ({
+            exercise_id: id,
+            muscle_id,
+          })))
         if (smError) throw smError
       }
 
       if (data.videos.length > 0) {
         const { error: vidError } = await supabase
           .from('exercise_videos')
-          .insert(
-            data.videos.map((video) => ({
-              exercise_id: id,
-              url: video.url,
-              title: video.title || null,
-            })) as any
-          )
+          .insert(data.videos.map((video) => ({
+            exercise_id: id,
+            url: video.url,
+            title: video.title || null,
+          })))
         if (vidError) throw vidError
       }
 
