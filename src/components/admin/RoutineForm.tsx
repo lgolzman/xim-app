@@ -1177,7 +1177,7 @@ export function RoutineForm({
 
       {/* Días */}
       <div className="bg-white border border-gray-200 rounded-lg">
-        <div className="p-4 space-y-4">
+        <div className={editorView === 'compact' ? 'p-4 space-y-4 md:p-2 md:space-y-2' : 'p-4 space-y-4'}>
           {!hasRoutineName && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Completá el nombre de la rutina para habilitar bloques y ejercicios. Así el borrador puede guardarse automáticamente.
@@ -1192,6 +1192,8 @@ export function RoutineForm({
               <div key={day.id} className="border border-gray-200 rounded-lg">
                 <div
                   className={`bg-gray-50 px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between gap-2 sm:gap-3 cursor-pointer ${
+                    editorView === 'compact' ? 'md:px-3 md:py-1' : ''
+                  } ${
                     isCollapsed && !isEditingMobileDayName ? 'rounded-lg' : 'rounded-t-lg'
                   }`}
                   role="button"
@@ -1244,7 +1246,7 @@ export function RoutineForm({
                         value={day.name}
                         onChange={(e) => updateDayName(dayIndex, e.target.value)}
                         placeholder="Nombre opcional"
-                        className="text-sm"
+                        className={editorView === 'compact' ? 'text-sm md:h-8 md:py-1' : 'text-sm'}
                       />
                     </div>
                   </div>
@@ -1252,6 +1254,7 @@ export function RoutineForm({
                     <Button
                       size="sm"
                       variant="ghost"
+                      className={editorView === 'compact' ? 'md:h-7 md:px-2 md:py-0 md:text-xs' : ''}
                       disabled={!hasRoutineName}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -1264,7 +1267,7 @@ export function RoutineForm({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-red-600"
+                        className={`text-red-600 ${editorView === 'compact' ? 'md:h-7 md:px-2 md:py-0 md:text-xs' : ''}`}
                         onClick={(e) => {
                           e.stopPropagation()
                           removeDay(dayIndex)
@@ -1297,18 +1300,19 @@ export function RoutineForm({
 
               {/* Bloques */}
               {!isCollapsed && (
-                <div className={editorView === 'compact' ? 'p-2 space-y-2' : 'p-4 space-y-4'}>
+                <div className={editorView === 'compact' ? 'p-2 space-y-2 md:p-1.5 md:space-y-1.5' : 'p-4 space-y-4'}>
                 {day.blocks.map((block, blockIndex) => {
                   const blockColor = getBlockColor(block.block_letter)
 
                   return (
-                  <div key={block.id} className={`border ${blockColor.border} ${blockColor.bg} rounded-lg`}>
-                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? 'py-1.5' : 'py-2'}`}>
-                      <span className="font-medium text-gray-700">Bloque {block.block_letter}</span>
+                  <div key={block.id} className={`border ${blockColor.border} ${blockColor.bg} rounded-lg ${editorView === 'compact' ? 'md:rounded-md' : ''}`}>
+                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? 'py-1.5 md:px-2 md:py-0.5 md:rounded-t-md' : 'py-2'}`}>
+                      <span className={`font-medium text-gray-700 ${editorView === 'compact' ? 'md:text-sm' : ''}`}>Bloque {block.block_letter}</span>
                       <div className="flex items-center gap-2">
                         <Button
                           size="sm"
                           variant="ghost"
+                          className={editorView === 'compact' ? 'md:h-6 md:px-2 md:py-0 md:text-xs' : ''}
                           disabled={!hasRoutineName}
                           onClick={() => openExerciseModal(dayIndex, blockIndex)}
                         >
@@ -1318,7 +1322,7 @@ export function RoutineForm({
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-red-600"
+                            className={`text-red-600 ${editorView === 'compact' ? 'md:h-6 md:px-2 md:py-0 md:text-xs' : ''}`}
                             onClick={() => removeBlock(dayIndex, blockIndex)}
                           >
                             ×
@@ -1328,21 +1332,21 @@ export function RoutineForm({
                     </div>
 
                     {/* Ejercicios del bloque */}
-                    <div className={editorView === 'compact' ? 'px-2 pb-2 space-y-1' : 'p-3 space-y-3'}>
+                    <div className={editorView === 'compact' ? 'px-2 pb-2 space-y-1 md:px-1.5 md:pb-1 md:space-y-0.5' : 'p-3 space-y-3'}>
                       {block.exercises.length === 0 ? (
-                        <p className={`text-gray-400 text-sm text-center ${editorView === 'compact' ? 'py-1.5' : 'py-2'}`}>
+                        <p className={`text-gray-400 text-sm text-center ${editorView === 'compact' ? 'py-1.5 md:py-0.5 md:text-xs' : 'py-2'}`}>
                           {hasRoutineName
                             ? editorView === 'compact' ? 'Sin ejercicios' : 'Sin ejercicios. Agregá uno con el botón + Ejercicio.'
                             : 'Sin ejercicios. Primero completá el nombre de la rutina.'}
                         </p>
                       ) : editorView === 'compact' ? (
-                        <div className="space-y-1">
+                        <div className="space-y-1 md:space-y-0.5">
                           {block.exercises.map((exercise, exerciseIndex) => (
                             <div
                               key={exercise.id}
-                              className="flex min-h-8 items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm"
+                              className="flex min-h-8 items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm md:min-h-6 md:gap-1.5 md:rounded md:px-1.5 md:py-0 md:text-xs"
                             >
-                              <span className="w-8 shrink-0 text-xs font-semibold text-gray-500">
+                              <span className="w-8 shrink-0 text-xs font-semibold text-gray-500 md:w-6 md:text-[11px]">
                                 {block.block_letter}{exercise.position}
                               </span>
                               <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -1350,7 +1354,7 @@ export function RoutineForm({
                                   {exercise.exercise?.name || 'Ejercicio'}
                                 </span>
                                 {exercise.exercise?.movement_pattern && (
-                                  <span className="max-w-36 shrink-0 truncate rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                                  <span className="max-w-36 shrink-0 truncate rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 md:max-w-28 md:px-1 md:py-0 md:text-[11px]">
                                     {exercise.exercise.movement_pattern.name}
                                   </span>
                                 )}
@@ -1358,7 +1362,7 @@ export function RoutineForm({
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-6 shrink-0 px-2 py-0 text-red-600"
+                                className="h-6 shrink-0 px-2 py-0 text-red-600 md:h-5 md:px-1.5 md:text-xs"
                                 onClick={() => removeExercise(dayIndex, blockIndex, exerciseIndex)}
                                 aria-label={`Eliminar ${exercise.exercise?.name || 'ejercicio'}`}
                               >
