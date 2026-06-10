@@ -1305,14 +1305,14 @@ export function RoutineForm({
                   const blockColor = getBlockColor(block.block_letter)
 
                   return (
-                  <div key={block.id} className={`border ${blockColor.border} ${blockColor.bg} rounded-lg ${editorView === 'compact' ? 'md:rounded-md' : ''}`}>
-                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? 'py-1.5 md:px-2 md:py-0.5 md:rounded-t-md' : 'py-2'}`}>
-                      <span className={`font-medium text-gray-700 ${editorView === 'compact' ? 'md:text-sm' : ''}`}>Bloque {block.block_letter}</span>
-                      <div className="flex items-center gap-2">
+                  <div key={block.id} className={`border ${blockColor.border} ${blockColor.bg} rounded-lg ${editorView === 'compact' ? 'md:flex md:items-stretch md:rounded-md' : ''}`}>
+                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? `py-1.5 md:w-24 md:shrink-0 md:flex-col md:items-start md:justify-start md:gap-1 md:rounded-l-md md:rounded-tr-none md:border-r md:px-2 md:py-1 ${blockColor.border}` : 'py-2'}`}>
+                      <span className={`font-medium text-gray-700 ${editorView === 'compact' ? 'md:text-xs md:leading-4' : ''}`}>Bloque {block.block_letter}</span>
+                      <div className={editorView === 'compact' ? 'flex items-center gap-2 md:w-full md:flex-col md:items-stretch md:gap-1' : 'flex items-center gap-2'}>
                         <Button
                           size="sm"
                           variant="ghost"
-                          className={editorView === 'compact' ? 'md:h-6 md:px-2 md:py-0 md:text-xs' : ''}
+                          className={editorView === 'compact' ? 'md:h-6 md:w-full md:px-1 md:py-0 md:text-[11px]' : ''}
                           disabled={!hasRoutineName}
                           onClick={() => openExerciseModal(dayIndex, blockIndex)}
                         >
@@ -1322,7 +1322,7 @@ export function RoutineForm({
                           <Button
                             size="sm"
                             variant="ghost"
-                            className={`text-red-600 ${editorView === 'compact' ? 'md:h-6 md:px-2 md:py-0 md:text-xs' : ''}`}
+                            className={`text-red-600 ${editorView === 'compact' ? 'md:h-6 md:w-full md:px-1 md:py-0 md:text-[11px]' : ''}`}
                             onClick={() => removeBlock(dayIndex, blockIndex)}
                           >
                             ×
@@ -1332,7 +1332,7 @@ export function RoutineForm({
                     </div>
 
                     {/* Ejercicios del bloque */}
-                    <div className={editorView === 'compact' ? 'px-2 pb-2 space-y-1 md:px-1.5 md:pb-1 md:space-y-0.5' : 'p-3 space-y-3'}>
+                    <div className={editorView === 'compact' ? 'px-2 pb-2 space-y-1 md:min-w-0 md:flex-1 md:px-1.5 md:py-1 md:space-y-0.5' : 'p-3 space-y-3'}>
                       {block.exercises.length === 0 ? (
                         <p className={`text-gray-400 text-sm text-center ${editorView === 'compact' ? 'py-1.5 md:py-0.5 md:text-xs' : 'py-2'}`}>
                           {hasRoutineName
