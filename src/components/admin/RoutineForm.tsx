@@ -1306,24 +1306,42 @@ export function RoutineForm({
 
                   return (
                   <div key={block.id} className={`border ${blockColor.border} ${blockColor.bg} rounded-lg ${editorView === 'compact' ? 'md:flex md:items-stretch md:rounded-md' : ''}`}>
-                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? `py-1.5 md:w-24 md:shrink-0 md:flex-col md:items-start md:justify-start md:gap-1 md:rounded-l-md md:rounded-tr-none md:border-r md:px-2 md:py-1 ${blockColor.border}` : 'py-2'}`}>
-                      <span className={`font-medium text-gray-700 ${editorView === 'compact' ? 'md:text-xs md:leading-4' : ''}`}>Bloque {block.block_letter}</span>
-                      <div className={editorView === 'compact' ? 'flex items-center gap-2 md:w-full md:flex-col md:items-stretch md:gap-1' : 'flex items-center gap-2'}>
+                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? `py-1.5 md:w-20 md:shrink-0 md:justify-start md:gap-1 md:rounded-l-md md:rounded-tr-none md:border-r md:px-2 md:py-0.5 ${blockColor.border}` : 'py-2'}`}>
+                      <span className={`font-medium text-gray-700 ${editorView === 'compact' ? 'md:w-5 md:text-xs md:leading-5' : ''}`}>
+                        {editorView === 'compact' ? (
+                          <>
+                            <span className="md:hidden">Bloque </span>
+                            {block.block_letter}
+                          </>
+                        ) : (
+                          `Bloque ${block.block_letter}`
+                        )}
+                      </span>
+                      <div className={editorView === 'compact' ? 'flex items-center gap-2 md:gap-1' : 'flex items-center gap-2'}>
                         <Button
                           size="sm"
                           variant="ghost"
-                          className={editorView === 'compact' ? 'md:h-6 md:w-full md:px-1 md:py-0 md:text-[11px]' : ''}
+                          className={editorView === 'compact' ? 'md:h-5 md:w-5 md:px-0 md:py-0 md:text-xs' : ''}
                           disabled={!hasRoutineName}
                           onClick={() => openExerciseModal(dayIndex, blockIndex)}
+                          aria-label={`Agregar ejercicio al bloque ${block.block_letter}`}
                         >
-                          + Ejercicio
+                          {editorView === 'compact' ? (
+                            <>
+                              <span className="md:hidden">+ Ejercicio</span>
+                              <span className="hidden md:inline">+</span>
+                            </>
+                          ) : (
+                            '+ Ejercicio'
+                          )}
                         </Button>
                         {day.blocks.length > 1 && (
                           <Button
                             size="sm"
                             variant="ghost"
-                            className={`text-red-600 ${editorView === 'compact' ? 'md:h-6 md:w-full md:px-1 md:py-0 md:text-[11px]' : ''}`}
+                            className={`text-red-600 ${editorView === 'compact' ? 'md:h-5 md:w-5 md:px-0 md:py-0 md:text-xs' : ''}`}
                             onClick={() => removeBlock(dayIndex, blockIndex)}
+                            aria-label={`Eliminar bloque ${block.block_letter}`}
                           >
                             ×
                           </Button>
