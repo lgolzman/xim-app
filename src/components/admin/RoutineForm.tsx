@@ -252,10 +252,12 @@ export function RoutineForm({
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null)
   const [selectedWeekByExerciseId, setSelectedWeekByExerciseId] = useState<Record<string, number>>({})
   const [expandedProgressionIds, setExpandedProgressionIds] = useState<Set<string>>(new Set())
+  const [editingMobileDayNameId, setEditingMobileDayNameId] = useState<string | null>(null)
   const [collapsedDayIds, setCollapsedDayIds] = useState<Set<string>>(() => {
     const initialDays = initialData?.days || []
     return new Set(initialDays.slice(0, -1).map(day => day.id))
   })
+  const dayNameInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoSaveInFlightRef = useRef(false)
   const autoSavePendingRef = useRef(false)
@@ -289,6 +291,12 @@ export function RoutineForm({
   useEffect(() => {
     onAutoSaveRef.current = onAutoSave
   }, [onAutoSave])
+
+  useEffect(() => {
+    if (!editingMobileDayNameId) return
+
+    dayNameInputRefs.current[editingMobileDayNameId]?.focus()
+  }, [editingMobileDayNameId])
 
   const runAutoSave = useCallback((data: FormData) => {
     if (!onAutoSaveRef.current) return
@@ -489,6 +497,15 @@ export function RoutineForm({
     const blockCount = day.blocks.length
     const exerciseCount = day.blocks.reduce((total, block) => total + block.exercises.length, 0)
     return `${blockCount} ${blockCount === 1 ? 'bloque' : 'bloques'} · ${exerciseCount} ${exerciseCount === 1 ? 'ejercicio' : 'ejercicios'}`
+  }
+
+  const updateDayName = (dayIndex: number, name: string) => {
+    setFormData(prev => ({
+      ...prev,
+      days: prev.days.map((d, i) =>
+        i === dayIndex ? { ...d, name } : d
+      ),
+    }))
   }
 
   const getSelectedWeek = (exercise: FormExercise) => {
@@ -1169,12 +1186,13 @@ export function RoutineForm({
 
           {formData.days.map((day, dayIndex) => {
             const isCollapsed = collapsedDayIds.has(day.id)
+            const isEditingMobileDayName = editingMobileDayNameId === day.id
 
             return (
               <div key={day.id} className="border border-gray-200 rounded-lg">
                 <div
-                  className={`bg-gray-50 px-4 py-3 flex items-center justify-between gap-3 cursor-pointer ${
-                    isCollapsed ? 'rounded-lg' : 'rounded-t-lg'
+                  className={`bg-gray-50 px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between gap-2 sm:gap-3 cursor-pointer ${
+                    isCollapsed && !isEditingMobileDayName ? 'rounded-lg' : 'rounded-t-lg'
                   }`}
                   role="button"
                   tabIndex={0}
@@ -1191,29 +1209,40 @@ export function RoutineForm({
                     <span className="text-sm text-gray-500 w-4" aria-hidden="true">
                       {isCollapsed ? '▶' : '▼'}
                     </span>
-                    <span className="font-semibold text-gray-900 whitespace-nowrap">
-                      Día {day.day_number}
-                    </span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="font-semibold text-gray-900 whitespace-nowrap">
+                        Día {day.day_number}
+                      </span>
+                      {day.name && (
+                        <span className="truncate text-sm text-gray-500 md:hidden">
+                          {day.name}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:hidden"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingMobileDayNameId(day.id)
+                        }}
+                        aria-label={`Editar nombre del día ${day.day_number}`}
+                      >
+                        ✎
+                      </button>
+                    </div>
                     {isCollapsed && (
-                      <span className="text-sm text-gray-500 truncate">
+                      <span className="hidden text-sm text-gray-500 truncate sm:inline">
                         — {getDaySummary(day)}
                       </span>
                     )}
                     <div
-                      className="w-40 shrink-0"
+                      className="hidden w-40 shrink-0 md:block"
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
                     >
                       <Input
                         value={day.name}
-                        onChange={(e) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            days: prev.days.map((d, i) =>
-                              i === dayIndex ? { ...d, name: e.target.value } : d
-                            ),
-                          }))
-                        }}
+                        onChange={(e) => updateDayName(dayIndex, e.target.value)}
                         placeholder="Nombre opcional"
                         className="text-sm"
                       />
@@ -1246,6 +1275,25 @@ export function RoutineForm({
                     )}
                   </div>
                 </div>
+
+                {isEditingMobileDayName && (
+                  <div
+                    className="border-t border-gray-200 bg-gray-50 px-3 pb-3 pt-2 md:hidden"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <Input
+                      ref={(element) => {
+                        dayNameInputRefs.current[day.id] = element
+                      }}
+                      value={day.name}
+                      onChange={(e) => updateDayName(dayIndex, e.target.value)}
+                      onBlur={() => setEditingMobileDayNameId(null)}
+                      placeholder="Nombre opcional"
+                      className="text-sm"
+                    />
+                  </div>
+                )}
 
               {/* Bloques */}
               {!isCollapsed && (
