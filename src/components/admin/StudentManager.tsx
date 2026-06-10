@@ -36,6 +36,7 @@ export function StudentManager() {
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
   const [addingSelf, setAddingSelf] = useState(false)
+  const [studentSearch, setStudentSearch] = useState('')
 
   const isSelfAlreadyStudent = Boolean(
     user?.id && students.some(student => student.id === user.id)
@@ -45,6 +46,21 @@ export function StudentManager() {
     profile?.role === 'admin' &&
     !isSelfAlreadyStudent
   )
+  const normalizedStudentSearch = studentSearch.trim().toLowerCase()
+  const filteredStudents = normalizedStudentSearch
+    ? students.filter(student => {
+        const searchableText = [
+          student.full_name,
+          student.name,
+          student.email,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+
+        return searchableText.includes(normalizedStudentSearch)
+      })
+    : students
 
   const handleAction = (student: Student, type: 'enable' | 'disable') => {
     setActionStudent(student)
@@ -107,7 +123,7 @@ export function StudentManager() {
 
     if (status === 'pending') {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+        <span className="inline-flex items-center rounded bg-yellow-100 px-1.5 py-0 text-[10px] font-medium leading-4 text-yellow-800 sm:px-2 sm:py-0.5 sm:text-xs">
           Pendiente
         </span>
       )
@@ -115,14 +131,14 @@ export function StudentManager() {
 
     if (status === 'disabled') {
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+        <span className="inline-flex items-center rounded bg-red-100 px-1.5 py-0 text-[10px] font-medium leading-4 text-red-800 sm:px-2 sm:py-0.5 sm:text-xs">
           Inhabilitado
         </span>
       )
     }
 
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+      <span className="inline-flex items-center rounded bg-green-100 px-1.5 py-0 text-[10px] font-medium leading-4 text-green-800 sm:px-2 sm:py-0.5 sm:text-xs">
         Activo
       </span>
     )
@@ -239,47 +255,61 @@ export function StudentManager() {
         </div>
       </div>
 
+      {students.length > 0 && (
+        <div className="mb-3">
+          <Input
+            value={studentSearch}
+            onChange={(e) => setStudentSearch(e.target.value)}
+            placeholder="Buscar alumno…"
+          />
+        </div>
+      )}
+
       {students.length === 0 ? (
         <p className="text-gray-500 text-sm text-center py-4">
           No hay alumnos registrados. Creá un alumno o enviá una invitación para empezar.
         </p>
+      ) : filteredStudents.length === 0 ? (
+        <p className="text-gray-500 text-sm text-center py-4">
+          No se encontraron alumnos
+        </p>
       ) : (
         <div className="space-y-2">
-          {students.map((student) => (
+          {filteredStudents.map((student) => (
             <div
               key={student.id}
-              className={`flex items-center justify-between p-4 rounded-lg border ${
+              className={`flex items-start justify-between gap-3 rounded-lg border p-3 sm:items-center sm:p-4 ${
                 getAccountStatus(student) !== 'disabled'
                   ? 'bg-white border-gray-200'
                   : 'bg-red-50 border-red-200'
               }`}
             >
               <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                  <span className="text-gray-900 font-medium truncate">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <span className="min-w-0 break-words text-sm font-medium leading-5 text-gray-900 sm:text-base">
                     {student.full_name || student.name || student.email || 'Alumno sin nombre'}
                   </span>
                   {student.id === user?.id && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                    <span className="inline-flex items-center rounded bg-blue-100 px-1.5 py-0 text-[10px] font-medium leading-4 text-blue-800 sm:px-2 sm:py-0.5 sm:text-xs">
                       Vos · Entrenadora
                     </span>
                   )}
                   {getStatusBadge(student)}
                 </div>
-                <div className="text-sm text-gray-500 mt-1">
-                  {(student.full_name || student.name) && student.email && <span className="mr-2">{student.email} ·</span>}
+                <div className="mt-0.5 text-xs leading-5 text-gray-500 sm:mt-1 sm:text-sm">
+                  {(student.full_name || student.name) && student.email && <span className="mr-1 sm:mr-2">{student.email} ·</span>}
                   {getAccountStatus(student) === 'pending' ? 'Creado' : 'Registrado'}: {formatDate(student.created_at)}
                   {getAccountStatus(student) === 'disabled' && student.disabled_at && (
-                    <span className="ml-2">
+                    <span className="ml-1 sm:ml-2">
                       · Inhabilitado: {formatDate(student.disabled_at)}
                     </span>
                   )}
                 </div>
               </div>
 
-              <div className="flex gap-2 ml-4">
+              <div className="flex shrink-0 items-start gap-1.5 sm:ml-4 sm:gap-2">
                 <Link to={`/admin/students/${student.id}`}>
-                  <Button size="sm" variant="ghost">
+                  <Button size="sm" variant="ghost" className="min-h-11 w-full sm:min-h-0 sm:w-auto">
                     Ver
                   </Button>
                 </Link>
@@ -287,6 +317,7 @@ export function StudentManager() {
                   <Button
                     size="sm"
                     variant="secondary"
+                    className="min-h-11 sm:min-h-0"
                     onClick={() => handleAction(student, 'enable')}
                   >
                     Habilitar
@@ -295,7 +326,7 @@ export function StudentManager() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    className="min-h-11 text-red-600 hover:text-red-700 hover:bg-red-50 sm:min-h-0"
                     onClick={() => handleAction(student, 'disable')}
                   >
                     Inhabilitar

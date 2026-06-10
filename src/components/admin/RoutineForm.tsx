@@ -252,10 +252,12 @@ export function RoutineForm({
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null)
   const [selectedWeekByExerciseId, setSelectedWeekByExerciseId] = useState<Record<string, number>>({})
   const [expandedProgressionIds, setExpandedProgressionIds] = useState<Set<string>>(new Set())
+  const [editingMobileDayNameId, setEditingMobileDayNameId] = useState<string | null>(null)
   const [collapsedDayIds, setCollapsedDayIds] = useState<Set<string>>(() => {
     const initialDays = initialData?.days || []
     return new Set(initialDays.slice(0, -1).map(day => day.id))
   })
+  const dayNameInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoSaveInFlightRef = useRef(false)
   const autoSavePendingRef = useRef(false)
@@ -289,6 +291,12 @@ export function RoutineForm({
   useEffect(() => {
     onAutoSaveRef.current = onAutoSave
   }, [onAutoSave])
+
+  useEffect(() => {
+    if (!editingMobileDayNameId) return
+
+    dayNameInputRefs.current[editingMobileDayNameId]?.focus()
+  }, [editingMobileDayNameId])
 
   const runAutoSave = useCallback((data: FormData) => {
     if (!onAutoSaveRef.current) return
@@ -489,6 +497,15 @@ export function RoutineForm({
     const blockCount = day.blocks.length
     const exerciseCount = day.blocks.reduce((total, block) => total + block.exercises.length, 0)
     return `${blockCount} ${blockCount === 1 ? 'bloque' : 'bloques'} · ${exerciseCount} ${exerciseCount === 1 ? 'ejercicio' : 'ejercicios'}`
+  }
+
+  const updateDayName = (dayIndex: number, name: string) => {
+    setFormData(prev => ({
+      ...prev,
+      days: prev.days.map((d, i) =>
+        i === dayIndex ? { ...d, name } : d
+      ),
+    }))
   }
 
   const getSelectedWeek = (exercise: FormExercise) => {
@@ -1160,7 +1177,7 @@ export function RoutineForm({
 
       {/* Días */}
       <div className="bg-white border border-gray-200 rounded-lg">
-        <div className="p-4 space-y-4">
+        <div className={editorView === 'compact' ? 'p-4 space-y-4 md:p-2 md:space-y-2' : 'p-4 space-y-4'}>
           {!hasRoutineName && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Completá el nombre de la rutina para habilitar bloques y ejercicios. Así el borrador puede guardarse automáticamente.
@@ -1169,12 +1186,15 @@ export function RoutineForm({
 
           {formData.days.map((day, dayIndex) => {
             const isCollapsed = collapsedDayIds.has(day.id)
+            const isEditingMobileDayName = editingMobileDayNameId === day.id
 
             return (
               <div key={day.id} className="border border-gray-200 rounded-lg">
                 <div
-                  className={`bg-gray-50 px-4 py-3 flex items-center justify-between gap-3 cursor-pointer ${
-                    isCollapsed ? 'rounded-lg' : 'rounded-t-lg'
+                  className={`bg-gray-50 px-3 py-2 sm:px-4 sm:py-3 flex items-center justify-between gap-2 sm:gap-3 cursor-pointer ${
+                    editorView === 'compact' ? 'md:px-3 md:py-1' : ''
+                  } ${
+                    isCollapsed && !isEditingMobileDayName ? 'rounded-lg' : 'rounded-t-lg'
                   }`}
                   role="button"
                   tabIndex={0}
@@ -1191,31 +1211,42 @@ export function RoutineForm({
                     <span className="text-sm text-gray-500 w-4" aria-hidden="true">
                       {isCollapsed ? '▶' : '▼'}
                     </span>
-                    <span className="font-semibold text-gray-900 whitespace-nowrap">
-                      Día {day.day_number}
-                    </span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="font-semibold text-gray-900 whitespace-nowrap">
+                        Día {day.day_number}
+                      </span>
+                      {day.name && (
+                        <span className="truncate text-sm text-gray-500 md:hidden">
+                          {day.name}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700 md:hidden"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingMobileDayNameId(day.id)
+                        }}
+                        aria-label={`Editar nombre del día ${day.day_number}`}
+                      >
+                        ✎
+                      </button>
+                    </div>
                     {isCollapsed && (
-                      <span className="text-sm text-gray-500 truncate">
+                      <span className="hidden text-sm text-gray-500 truncate sm:inline">
                         — {getDaySummary(day)}
                       </span>
                     )}
                     <div
-                      className="w-40 shrink-0"
+                      className="hidden w-40 shrink-0 md:block"
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
                     >
                       <Input
                         value={day.name}
-                        onChange={(e) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            days: prev.days.map((d, i) =>
-                              i === dayIndex ? { ...d, name: e.target.value } : d
-                            ),
-                          }))
-                        }}
+                        onChange={(e) => updateDayName(dayIndex, e.target.value)}
                         placeholder="Nombre opcional"
-                        className="text-sm"
+                        className={editorView === 'compact' ? 'text-sm md:h-8 md:py-1' : 'text-sm'}
                       />
                     </div>
                   </div>
@@ -1223,6 +1254,7 @@ export function RoutineForm({
                     <Button
                       size="sm"
                       variant="ghost"
+                      className={editorView === 'compact' ? 'md:h-7 md:px-2 md:py-0 md:text-xs' : ''}
                       disabled={!hasRoutineName}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -1235,7 +1267,7 @@ export function RoutineForm({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-red-600"
+                        className={`text-red-600 ${editorView === 'compact' ? 'md:h-7 md:px-2 md:py-0 md:text-xs' : ''}`}
                         onClick={(e) => {
                           e.stopPropagation()
                           removeDay(dayIndex)
@@ -1247,31 +1279,69 @@ export function RoutineForm({
                   </div>
                 </div>
 
+                {isEditingMobileDayName && (
+                  <div
+                    className="border-t border-gray-200 bg-gray-50 px-3 pb-3 pt-2 md:hidden"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <Input
+                      ref={(element) => {
+                        dayNameInputRefs.current[day.id] = element
+                      }}
+                      value={day.name}
+                      onChange={(e) => updateDayName(dayIndex, e.target.value)}
+                      onBlur={() => setEditingMobileDayNameId(null)}
+                      placeholder="Nombre opcional"
+                      className="text-sm"
+                    />
+                  </div>
+                )}
+
               {/* Bloques */}
               {!isCollapsed && (
-                <div className={editorView === 'compact' ? 'p-2 space-y-2' : 'p-4 space-y-4'}>
+                <div className={editorView === 'compact' ? 'p-2 space-y-2 md:p-1.5 md:space-y-1.5' : 'p-4 space-y-4'}>
                 {day.blocks.map((block, blockIndex) => {
                   const blockColor = getBlockColor(block.block_letter)
 
                   return (
-                  <div key={block.id} className={`border ${blockColor.border} ${blockColor.bg} rounded-lg`}>
-                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? 'py-1.5' : 'py-2'}`}>
-                      <span className="font-medium text-gray-700">Bloque {block.block_letter}</span>
-                      <div className="flex items-center gap-2">
+                  <div key={block.id} className={`border ${blockColor.border} ${blockColor.bg} rounded-lg ${editorView === 'compact' ? 'md:flex md:items-stretch md:rounded-md' : ''}`}>
+                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? `py-1.5 md:w-20 md:shrink-0 md:justify-start md:gap-1 md:rounded-l-md md:rounded-tr-none md:border-r md:px-2 md:py-0.5 ${blockColor.border}` : 'py-2'}`}>
+                      <span className={`font-medium text-gray-700 ${editorView === 'compact' ? 'md:w-5 md:text-xs md:leading-5' : ''}`}>
+                        {editorView === 'compact' ? (
+                          <>
+                            <span className="md:hidden">Bloque </span>
+                            {block.block_letter}
+                          </>
+                        ) : (
+                          `Bloque ${block.block_letter}`
+                        )}
+                      </span>
+                      <div className={editorView === 'compact' ? 'flex items-center gap-2 md:gap-1' : 'flex items-center gap-2'}>
                         <Button
                           size="sm"
                           variant="ghost"
+                          className={editorView === 'compact' ? 'md:h-5 md:w-5 md:px-0 md:py-0 md:text-xs' : ''}
                           disabled={!hasRoutineName}
                           onClick={() => openExerciseModal(dayIndex, blockIndex)}
+                          aria-label={`Agregar ejercicio al bloque ${block.block_letter}`}
                         >
-                          + Ejercicio
+                          {editorView === 'compact' ? (
+                            <>
+                              <span className="md:hidden">+ Ejercicio</span>
+                              <span className="hidden md:inline">+</span>
+                            </>
+                          ) : (
+                            '+ Ejercicio'
+                          )}
                         </Button>
                         {day.blocks.length > 1 && (
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-red-600"
+                            className={`text-red-600 ${editorView === 'compact' ? 'md:h-5 md:w-5 md:px-0 md:py-0 md:text-xs' : ''}`}
                             onClick={() => removeBlock(dayIndex, blockIndex)}
+                            aria-label={`Eliminar bloque ${block.block_letter}`}
                           >
                             ×
                           </Button>
@@ -1280,21 +1350,21 @@ export function RoutineForm({
                     </div>
 
                     {/* Ejercicios del bloque */}
-                    <div className={editorView === 'compact' ? 'px-2 pb-2 space-y-1' : 'p-3 space-y-3'}>
+                    <div className={editorView === 'compact' ? 'px-2 pb-2 space-y-1 md:min-w-0 md:flex-1 md:px-1.5 md:py-1 md:space-y-0.5' : 'p-3 space-y-3'}>
                       {block.exercises.length === 0 ? (
-                        <p className={`text-gray-400 text-sm text-center ${editorView === 'compact' ? 'py-1.5' : 'py-2'}`}>
+                        <p className={`text-gray-400 text-sm text-center ${editorView === 'compact' ? 'py-1.5 md:py-0.5 md:text-xs' : 'py-2'}`}>
                           {hasRoutineName
                             ? editorView === 'compact' ? 'Sin ejercicios' : 'Sin ejercicios. Agregá uno con el botón + Ejercicio.'
                             : 'Sin ejercicios. Primero completá el nombre de la rutina.'}
                         </p>
                       ) : editorView === 'compact' ? (
-                        <div className="space-y-1">
+                        <div className="space-y-1 md:space-y-0.5">
                           {block.exercises.map((exercise, exerciseIndex) => (
                             <div
                               key={exercise.id}
-                              className="flex min-h-8 items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm"
+                              className="flex min-h-8 items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm md:min-h-6 md:gap-1.5 md:rounded md:px-1.5 md:py-0 md:text-xs"
                             >
-                              <span className="w-8 shrink-0 text-xs font-semibold text-gray-500">
+                              <span className="w-8 shrink-0 text-xs font-semibold text-gray-500 md:w-6 md:text-[11px]">
                                 {block.block_letter}{exercise.position}
                               </span>
                               <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -1302,7 +1372,7 @@ export function RoutineForm({
                                   {exercise.exercise?.name || 'Ejercicio'}
                                 </span>
                                 {exercise.exercise?.movement_pattern && (
-                                  <span className="max-w-36 shrink-0 truncate rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                                  <span className="max-w-36 shrink-0 truncate rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 md:max-w-28 md:px-1 md:py-0 md:text-[11px]">
                                     {exercise.exercise.movement_pattern.name}
                                   </span>
                                 )}
@@ -1310,7 +1380,7 @@ export function RoutineForm({
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-6 shrink-0 px-2 py-0 text-red-600"
+                                className="h-6 shrink-0 px-2 py-0 text-red-600 md:h-5 md:px-1.5 md:text-xs"
                                 onClick={() => removeExercise(dayIndex, blockIndex, exerciseIndex)}
                                 aria-label={`Eliminar ${exercise.exercise?.name || 'ejercicio'}`}
                               >
