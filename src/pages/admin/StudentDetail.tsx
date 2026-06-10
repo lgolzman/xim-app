@@ -831,10 +831,10 @@ export function StudentDetail() {
                 {routines.map((routine) => (
                   <div
                     key={routine.id}
-                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                    className="flex flex-col gap-3 rounded-lg bg-gray-50 p-4 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium text-gray-900">{routine.name}</span>
                         {getStatusBadge(routine.status)}
                       </div>
@@ -842,14 +842,14 @@ export function StudentDetail() {
                         {routine.total_weeks} semanas · Creada: {formatDate(routine.created_at)}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Link to={`/admin/routines/${routine.id}/view`}>
-                        <Button variant="secondary" size="sm">
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                      <Link to={`/admin/routines/${routine.id}/view`} className="block">
+                        <Button variant="secondary" size="sm" className="min-h-11 w-full sm:min-h-0 sm:w-auto">
                           Ver rutina completa
                         </Button>
                       </Link>
-                      <Link to={`/admin/routines/${routine.id}/edit`}>
-                        <Button variant="ghost" size="sm">
+                      <Link to={`/admin/routines/${routine.id}/edit`} className="block">
+                        <Button variant="ghost" size="sm" className="min-h-11 w-full sm:min-h-0 sm:w-auto">
                           {routine.status === 'archived' ? 'Ver' : 'Editar'}
                         </Button>
                       </Link>
@@ -858,6 +858,7 @@ export function StudentDetail() {
                           <Button
                             variant="secondary"
                             size="sm"
+                            className="min-h-11 w-full sm:min-h-0 sm:w-auto"
                             onClick={() => handleRoutineAction(routine.id, 'activate')}
                           >
                             Activar
@@ -865,7 +866,7 @@ export function StudentDetail() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-red-600 hover:text-red-700"
+                            className="min-h-11 w-full text-red-600 hover:text-red-700 sm:min-h-0 sm:w-auto"
                             onClick={() => handleRoutineAction(routine.id, 'delete')}
                           >
                             Eliminar
@@ -876,6 +877,7 @@ export function StudentDetail() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="min-h-11 w-full sm:min-h-0 sm:w-auto"
                           onClick={() => handleRoutineAction(routine.id, 'archive')}
                         >
                           Archivar
@@ -885,6 +887,7 @@ export function StudentDetail() {
                         <Button
                           variant="secondary"
                           size="sm"
+                          className="min-h-11 w-full sm:min-h-0 sm:w-auto"
                           onClick={() => handleRoutineAction(routine.id, 'reactivate')}
                         >
                           Reactivar
