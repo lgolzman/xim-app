@@ -361,11 +361,11 @@ function routineToFormData(routine: RoutineWithDays): RoutineFormData {
         id: generateFormId(),
         block_letter: block.block_letter,
         block_order: block.block_order,
-        exercises: block.block_exercises.map(exercise => ({
+        exercises: block.block_exercises.map((exercise, exerciseIndex) => ({
           id: generateFormId(),
           exercise_id: exercise.exercise_id,
           exercise: exercise.exercise,
-          position: exercise.position,
+          position: exerciseIndex + 1,
           note: exercise.note || '',
           weeks: Array.from({ length: routine.total_weeks }, (_, index) => {
             const weekNumber = index + 1
@@ -397,11 +397,11 @@ function dbRoutineToFormData(routine: RoutineWithDays): RoutineFormData {
         id: block.id,
         block_letter: block.block_letter,
         block_order: block.block_order,
-        exercises: block.block_exercises.map(exercise => ({
+        exercises: block.block_exercises.map((exercise, exerciseIndex) => ({
           id: exercise.id,
           exercise_id: exercise.exercise_id,
           exercise: exercise.exercise,
-          position: exercise.position,
+          position: exerciseIndex + 1,
           note: exercise.note || '',
           weeks: Array.from({ length: routine.total_weeks }, (_, index) => {
             const weekNumber = index + 1
@@ -436,9 +436,9 @@ function formDataToCreateRoutineData(formData: RoutineFormData): CreateRoutineDa
       blocks: sortFormBlocksByLetter(day.blocks).map((block, blockIndex) => ({
         block_letter: block.block_letter,
         block_order: blockIndex,
-        exercises: block.exercises.map(exercise => ({
+        exercises: block.exercises.map((exercise, exerciseIndex) => ({
           exercise_id: exercise.exercise_id,
-          position: exercise.position,
+          position: exerciseIndex + 1,
           note: exercise.note || undefined,
           sets: exercise.weeks.flatMap(week =>
             week.sets.map((set, setIndex) => ({
@@ -467,10 +467,10 @@ function formDataToUpdateRoutineData(formData: RoutineFormData): UpdateRoutineDa
         id: block.id,
         block_letter: block.block_letter,
         block_order: blockIndex,
-        exercises: block.exercises.map(exercise => ({
+        exercises: block.exercises.map((exercise, exerciseIndex) => ({
           id: exercise.id,
           exercise_id: exercise.exercise_id,
-          position: exercise.position,
+          position: exerciseIndex + 1,
           note: exercise.note || undefined,
           sets: exercise.weeks.flatMap(week =>
             week.sets.map((set, setIndex) => ({

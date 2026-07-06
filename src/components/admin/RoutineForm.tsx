@@ -99,6 +99,12 @@ const AUTO_SAVE_DEBOUNCE_MS = 15000
 type RoutineEditorView = 'compact' | 'detailed'
 type ExerciseModalMode = 'select' | 'create'
 
+interface ExerciseCopySource {
+  dayIndex: number
+  blockIndex: number
+  exerciseIndex: number
+}
+
 // Generar ID único
 const generateId = () => Math.random().toString(36).substring(2, 11)
 
@@ -253,6 +259,8 @@ export function RoutineForm({
   const [selectedWeekByExerciseId, setSelectedWeekByExerciseId] = useState<Record<string, number>>({})
   const [expandedProgressionIds, setExpandedProgressionIds] = useState<Set<string>>(new Set())
   const [editingMobileDayNameId, setEditingMobileDayNameId] = useState<string | null>(null)
+  const [exerciseCopySource, setExerciseCopySource] = useState<ExerciseCopySource | null>(null)
+  const [copyConfirmation, setCopyConfirmation] = useState<string | null>(null)
   const [collapsedDayIds, setCollapsedDayIds] = useState<Set<string>>(() => {
     const initialDays = initialData?.days || []
     return new Set(initialDays.slice(0, -1).map(day => day.id))
@@ -297,6 +305,16 @@ export function RoutineForm({
 
     dayNameInputRefs.current[editingMobileDayNameId]?.focus()
   }, [editingMobileDayNameId])
+
+  useEffect(() => {
+    if (!copyConfirmation) return
+
+    const timer = setTimeout(() => {
+      setCopyConfirmation(null)
+    }, 3500)
+
+    return () => clearTimeout(timer)
+  }, [copyConfirmation])
 
   const runAutoSave = useCallback((data: FormData) => {
     if (!onAutoSaveRef.current) return
@@ -543,6 +561,27 @@ export function RoutineForm({
     setExerciseCreateSaving(false)
   }
 
+  const openCopyExerciseModal = (dayIndex: number, blockIndex: number, exerciseIndex: number) => {
+    setExerciseCopySource({ dayIndex, blockIndex, exerciseIndex })
+  }
+
+  const closeCopyExerciseModal = () => {
+    setExerciseCopySource(null)
+  }
+
+  const cloneExerciseForRoutine = (exercise: FormExercise, position: number): FormExercise => ({
+    ...exercise,
+    id: generateId(),
+    position,
+    weeks: exercise.weeks.map(week => ({
+      ...week,
+      sets: week.sets.map(set => ({
+        ...set,
+        id: generateId(),
+      })),
+    })),
+  })
+
   const handleEditorViewChange = (view: RoutineEditorView) => {
     setEditorView(view)
     window.localStorage.setItem(ROUTINE_EDITOR_VIEW_KEY, view)
@@ -707,6 +746,48 @@ export function RoutineForm({
     setExerciseModalOpen(false)
   }
 
+  const copyExerciseToBlock = (targetDayIndex: number, targetBlockIndex: number) => {
+    if (!exerciseCopySource) return
+
+    const sourceExercise = formData
+      .days[exerciseCopySource.dayIndex]
+      ?.blocks[exerciseCopySource.blockIndex]
+      ?.exercises[exerciseCopySource.exerciseIndex]
+
+    const targetDay = formData.days[targetDayIndex]
+    const targetBlock = targetDay?.blocks[targetBlockIndex]
+
+    if (!sourceExercise || !targetDay || !targetBlock) return
+
+    const copiedExercise = cloneExerciseForRoutine(sourceExercise, targetBlock.exercises.length + 1)
+    const targetLabel = `Bloque ${targetBlock.block_letter} — Día ${targetDay.day_number}`
+
+    setFormData(prev => ({
+      ...prev,
+      days: prev.days.map((day, dayIndex) => {
+        if (dayIndex !== targetDayIndex) return day
+
+        return {
+          ...day,
+          blocks: day.blocks.map((block, blockIndex) => {
+            if (blockIndex !== targetBlockIndex) return block
+
+            return {
+              ...block,
+              exercises: [...block.exercises, copiedExercise].map((exercise, index) => ({
+                ...exercise,
+                position: index + 1,
+              })),
+            }
+          }),
+        }
+      }),
+    }))
+
+    setCopyConfirmation(`Ejercicio copiado al ${targetLabel}`)
+    setExerciseCopySource(null)
+  }
+
   const handleCreateExercise = async (data: ExerciseFormData) => {
     setExerciseCreateSaving(true)
     setExerciseCreateError(null)
@@ -747,6 +828,38 @@ export function RoutineForm({
               exercises: b.exercises
                 .filter((_, ei) => ei !== exerciseIndex)
                 .map((e, ei) => ({ ...e, position: ei + 1 })),
+            }
+          }),
+        }
+      }),
+    }))
+  }
+
+  const moveExercise = (dayIndex: number, blockIndex: number, exerciseIndex: number, direction: -1 | 1) => {
+    const nextIndex = exerciseIndex + direction
+    if (nextIndex < 0) return
+
+    setFormData(prev => ({
+      ...prev,
+      days: prev.days.map((d, di) => {
+        if (di !== dayIndex) return d
+        return {
+          ...d,
+          blocks: d.blocks.map((b, bi) => {
+            if (bi !== blockIndex) return b
+            if (nextIndex >= b.exercises.length) return b
+
+            const reorderedExercises = [...b.exercises]
+            const currentExercise = reorderedExercises[exerciseIndex]
+            reorderedExercises[exerciseIndex] = reorderedExercises[nextIndex]
+            reorderedExercises[nextIndex] = currentExercise
+
+            return {
+              ...b,
+              exercises: reorderedExercises.map((exercise, index) => ({
+                ...exercise,
+                position: index + 1,
+              })),
             }
           }),
         }
@@ -1091,8 +1204,25 @@ export function RoutineForm({
     await onCancel()
   }
 
+  const exerciseToCopy = exerciseCopySource
+    ? formData.days[exerciseCopySource.dayIndex]
+      ?.blocks[exerciseCopySource.blockIndex]
+      ?.exercises[exerciseCopySource.exerciseIndex]
+    : null
+  const nextEditorView = editorView === 'compact' ? 'detailed' : 'compact'
+
   return (
     <div className="space-y-6">
+      {copyConfirmation && (
+        <div
+          className="fixed bottom-20 left-4 right-4 z-40 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800 shadow-lg sm:left-auto sm:right-6 sm:max-w-sm"
+          role="status"
+          aria-live="polite"
+        >
+          {copyConfirmation}
+        </div>
+      )}
+
       {onAutoSave && !isArchivedRoutine && (
         <div className="text-xs text-gray-500">
           {autoSaveStatus === 'saving' && '● Guardando borrador...'}
@@ -1377,6 +1507,43 @@ export function RoutineForm({
                                   </span>
                                 )}
                               </span>
+                              <div className="flex shrink-0 items-center gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 px-0 py-0 md:h-5 md:w-5 md:text-xs"
+                                  disabled={exerciseIndex === 0}
+                                  onClick={() => moveExercise(dayIndex, blockIndex, exerciseIndex, -1)}
+                                  aria-label={`Subir ${exercise.exercise?.name || 'ejercicio'}`}
+                                  title="Subir ejercicio"
+                                >
+                                  ↑
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 px-0 py-0 md:h-5 md:w-5 md:text-xs"
+                                  disabled={exerciseIndex === block.exercises.length - 1}
+                                  onClick={() => moveExercise(dayIndex, blockIndex, exerciseIndex, 1)}
+                                  aria-label={`Bajar ${exercise.exercise?.name || 'ejercicio'}`}
+                                  title="Bajar ejercicio"
+                                >
+                                  ↓
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 px-0 py-0 md:h-5 md:w-5 md:text-xs"
+                                  onClick={() => openCopyExerciseModal(dayIndex, blockIndex, exerciseIndex)}
+                                  aria-label={`Copiar ${exercise.exercise?.name || 'ejercicio'} a otro bloque`}
+                                  title="Copiar a..."
+                                >
+                                  ⧉
+                                </Button>
+                              </div>
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -1414,14 +1581,52 @@ export function RoutineForm({
                                     )}
                                   </h4>
                                 </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-red-600"
-                                  onClick={() => removeExercise(dayIndex, blockIndex, exerciseIndex)}
-                                >
-                                  ×
-                                </Button>
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="px-2"
+                                    disabled={exerciseIndex === 0}
+                                    onClick={() => moveExercise(dayIndex, blockIndex, exerciseIndex, -1)}
+                                    aria-label={`Subir ${exercise.exercise?.name || 'ejercicio'}`}
+                                    title="Subir ejercicio"
+                                  >
+                                    ↑
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="px-2"
+                                    disabled={exerciseIndex === block.exercises.length - 1}
+                                    onClick={() => moveExercise(dayIndex, blockIndex, exerciseIndex, 1)}
+                                    aria-label={`Bajar ${exercise.exercise?.name || 'ejercicio'}`}
+                                    title="Bajar ejercicio"
+                                  >
+                                    ↓
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="px-2"
+                                    onClick={() => openCopyExerciseModal(dayIndex, blockIndex, exerciseIndex)}
+                                    aria-label={`Copiar ${exercise.exercise?.name || 'ejercicio'} a otro bloque`}
+                                    title="Copiar a..."
+                                  >
+                                    ⧉
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-600"
+                                    onClick={() => removeExercise(dayIndex, blockIndex, exerciseIndex)}
+                                    aria-label={`Eliminar ${exercise.exercise?.name || 'ejercicio'}`}
+                                  >
+                                    ×
+                                  </Button>
+                                </div>
                               </div>
 
                               {/* Nota del ejercicio */}
@@ -1629,6 +1834,57 @@ export function RoutineForm({
           </>
         )}
       </div>
+
+      <Button
+        type="button"
+        className="fixed bottom-4 right-4 z-30 rounded-full px-4 py-3 shadow-lg sm:bottom-6 sm:right-6 sm:px-5"
+        onClick={() => handleEditorViewChange(nextEditorView)}
+        aria-label={editorView === 'compact' ? 'Ver rutina ampliada' : 'Ver rutina compacta'}
+      >
+        {editorView === 'compact' ? 'Ver rutina ampliada' : 'Ver rutina compacta'}
+      </Button>
+
+      <Modal
+        isOpen={Boolean(exerciseCopySource)}
+        onClose={closeCopyExerciseModal}
+        title="Copiar ejercicio a..."
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+            <p className="text-sm text-gray-500">Ejercicio seleccionado</p>
+            <p className="font-medium text-gray-900">{exerciseToCopy?.exercise?.name || 'Ejercicio'}</p>
+          </div>
+
+          <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
+            {formData.days.map((day, targetDayIndex) => (
+              <div key={day.id} className="space-y-2">
+                <div>
+                  <h4 className="font-semibold text-gray-900">
+                    Día {day.day_number}{day.name ? ` — ${day.name}` : ''}
+                  </h4>
+                  <p className="text-xs text-gray-500">{getDaySummary(day)}</p>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {day.blocks.map((block, targetBlockIndex) => (
+                    <button
+                      key={block.id}
+                      type="button"
+                      onClick={() => copyExerciseToBlock(targetDayIndex, targetBlockIndex)}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-3 text-left transition-colors hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                    >
+                      <span className="block font-medium text-gray-900">Bloque {block.block_letter}</span>
+                      <span className="block text-sm text-gray-500">
+                        {block.exercises.length} {block.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal de selección de ejercicio */}
       <Modal
