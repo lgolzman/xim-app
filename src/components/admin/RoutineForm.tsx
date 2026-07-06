@@ -113,10 +113,24 @@ const getInitialEditorView = (): RoutineEditorView => {
   return window.localStorage.getItem(ROUTINE_EDITOR_VIEW_KEY) === 'compact' ? 'compact' : 'detailed'
 }
 
-const sortBlocksByLetter = (blocks: FormBlock[]) => {
-  return [...blocks]
-    .sort((a, b) => a.block_letter.localeCompare(b.block_letter))
-    .map((block, index) => ({ ...block, block_order: index }))
+const getBlockLetterByIndex = (index: number) => {
+  return BLOCK_LETTERS[index] || `X${index + 1}`
+}
+
+const normalizeExercises = (exercises: FormExercise[]) => {
+  return exercises.map((exercise, index) => ({
+    ...exercise,
+    position: index + 1,
+  }))
+}
+
+const normalizeBlocks = (blocks: FormBlock[]) => {
+  return blocks.map((block, index) => ({
+    ...block,
+    block_letter: getBlockLetterByIndex(index),
+    block_order: index,
+    exercises: normalizeExercises(block.exercises),
+  }))
 }
 
 // Crear sets vacíos para una semana
@@ -661,19 +675,15 @@ export function RoutineForm({
   const addBlock = (dayIndex: number) => {
     if (!hasRoutineName) return
 
-    const day = formData.days[dayIndex]
-    const usedLetters = day.blocks.map(b => b.block_letter)
-    const nextLetter = BLOCK_LETTERS.find(l => !usedLetters.includes(l)) || 'X'
-
     setFormData(prev => ({
       ...prev,
       days: prev.days.map((d, i) => {
         if (i !== dayIndex) return d
         return {
           ...d,
-          blocks: sortBlocksByLetter([...d.blocks, {
+          blocks: normalizeBlocks([...d.blocks, {
             id: generateId(),
-            block_letter: nextLetter,
+            block_letter: getBlockLetterByIndex(d.blocks.length),
             block_order: 0,
             exercises: [],
           }]),
@@ -693,7 +703,30 @@ export function RoutineForm({
         if (i !== dayIndex) return d
         return {
           ...d,
-          blocks: sortBlocksByLetter(d.blocks.filter((_, bi) => bi !== blockIndex)),
+          blocks: normalizeBlocks(d.blocks.filter((_, bi) => bi !== blockIndex)),
+        }
+      }),
+    }))
+  }
+
+  const moveBlock = (dayIndex: number, blockIndex: number, direction: -1 | 1) => {
+    const nextIndex = blockIndex + direction
+    if (nextIndex < 0) return
+
+    setFormData(prev => ({
+      ...prev,
+      days: prev.days.map((day, currentDayIndex) => {
+        if (currentDayIndex !== dayIndex) return day
+        if (nextIndex >= day.blocks.length) return day
+
+        const reorderedBlocks = [...day.blocks]
+        const currentBlock = reorderedBlocks[blockIndex]
+        reorderedBlocks[blockIndex] = reorderedBlocks[nextIndex]
+        reorderedBlocks[nextIndex] = currentBlock
+
+        return {
+          ...day,
+          blocks: normalizeBlocks(reorderedBlocks),
         }
       }),
     }))
@@ -729,14 +762,14 @@ export function RoutineForm({
             if (bi !== currentBlockIndex) return b
             return {
               ...b,
-              exercises: [...b.exercises, {
+              exercises: normalizeExercises([...b.exercises, {
                 id: generateId(),
                 exercise_id: exercise.id,
                 exercise: exercise,
                 position: newPosition,
                 note: '',
                 weeks: createEmptyWeeks(prev.total_weeks),
-              }],
+              }]),
             }
           }),
         }
@@ -774,10 +807,7 @@ export function RoutineForm({
 
             return {
               ...block,
-              exercises: [...block.exercises, copiedExercise].map((exercise, index) => ({
-                ...exercise,
-                position: index + 1,
-              })),
+              exercises: normalizeExercises([...block.exercises, copiedExercise]),
             }
           }),
         }
@@ -825,9 +855,7 @@ export function RoutineForm({
             if (bi !== blockIndex) return b
             return {
               ...b,
-              exercises: b.exercises
-                .filter((_, ei) => ei !== exerciseIndex)
-                .map((e, ei) => ({ ...e, position: ei + 1 })),
+              exercises: normalizeExercises(b.exercises.filter((_, ei) => ei !== exerciseIndex)),
             }
           }),
         }
@@ -856,10 +884,7 @@ export function RoutineForm({
 
             return {
               ...b,
-              exercises: reorderedExercises.map((exercise, index) => ({
-                ...exercise,
-                position: index + 1,
-              })),
+              exercises: normalizeExercises(reorderedExercises),
             }
           }),
         }
@@ -1436,7 +1461,7 @@ export function RoutineForm({
 
                   return (
                   <div key={block.id} className={`border ${blockColor.border} ${blockColor.bg} rounded-lg ${editorView === 'compact' ? 'md:flex md:items-stretch md:rounded-md' : ''}`}>
-                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? `py-1.5 md:w-20 md:shrink-0 md:justify-start md:gap-1 md:rounded-l-md md:rounded-tr-none md:border-r md:px-2 md:py-0.5 ${blockColor.border}` : 'py-2'}`}>
+                    <div className={`flex items-center justify-between rounded-t-lg px-3 ${editorView === 'compact' ? `py-1.5 md:w-36 md:shrink-0 md:justify-start md:gap-1 md:rounded-l-md md:rounded-tr-none md:border-r md:px-2 md:py-0.5 ${blockColor.border}` : 'py-2'}`}>
                       <span className={`font-medium text-gray-700 ${editorView === 'compact' ? 'md:w-5 md:text-xs md:leading-5' : ''}`}>
                         {editorView === 'compact' ? (
                           <>
@@ -1448,6 +1473,30 @@ export function RoutineForm({
                         )}
                       </span>
                       <div className={editorView === 'compact' ? 'flex items-center gap-2 md:gap-1' : 'flex items-center gap-2'}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className={editorView === 'compact' ? 'md:h-5 md:w-5 md:px-0 md:py-0 md:text-xs' : 'px-2'}
+                          disabled={blockIndex === 0}
+                          onClick={() => moveBlock(dayIndex, blockIndex, -1)}
+                          aria-label={`Subir bloque ${block.block_letter}`}
+                          title="Subir bloque"
+                        >
+                          ↑
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className={editorView === 'compact' ? 'md:h-5 md:w-5 md:px-0 md:py-0 md:text-xs' : 'px-2'}
+                          disabled={blockIndex === day.blocks.length - 1}
+                          onClick={() => moveBlock(dayIndex, blockIndex, 1)}
+                          aria-label={`Bajar bloque ${block.block_letter}`}
+                          title="Bajar bloque"
+                        >
+                          ↓
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"

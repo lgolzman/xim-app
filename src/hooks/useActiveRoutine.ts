@@ -6,12 +6,30 @@ import type {
   RoutineBlock,
   BlockExercise,
   PrescribedSet,
+  ExerciseInRoutine,
 } from '../lib/types'
 import { withPhotoPublicUrl } from './useExercisePhotos'
 
 interface UseActiveRoutineOptions {
   includeInactiveBlockExercises?: boolean
 }
+
+type ActiveBlockExercise = BlockExercise & {
+  exercise?: ExerciseInRoutine | null
+  prescribed_sets?: PrescribedSet[]
+}
+
+type ActiveRoutineBlock = RoutineBlock & {
+  block_exercises?: ActiveBlockExercise[]
+}
+
+type ActiveRoutineDay = RoutineDay & {
+  routine_blocks?: ActiveRoutineBlock[]
+}
+
+const DISPLAY_BLOCK_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+
+const getDisplayBlockLetter = (index: number) => DISPLAY_BLOCK_LETTERS[index] || `X${index + 1}`
 
 export function useActiveRoutine(
   studentId: string | undefined,
@@ -78,16 +96,21 @@ export function useActiveRoutine(
       // Ordenar los datos
       if (data?.routine_days) {
         data.routine_days.sort((a: RoutineDay, b: RoutineDay) => a.day_number - b.day_number)
-        data.routine_days.forEach((day: any) => {
+        data.routine_days.forEach((day: ActiveRoutineDay) => {
           if (day.routine_blocks) {
-            day.routine_blocks.sort((a: RoutineBlock, b: RoutineBlock) => a.block_order - b.block_order)
-            day.routine_blocks.forEach((block: any) => {
+            day.routine_blocks.sort((a: RoutineBlock, b: RoutineBlock) =>
+              a.block_order - b.block_order || a.block_letter.localeCompare(b.block_letter)
+            )
+            day.routine_blocks.forEach((block: ActiveRoutineBlock, blockIndex: number) => {
+              block.block_letter = getDisplayBlockLetter(blockIndex)
+              block.block_order = blockIndex
+
               if (block.block_exercises) {
                 if (!options.includeInactiveBlockExercises) {
                   block.block_exercises = block.block_exercises.filter((ex: BlockExercise) => ex.active !== false)
                 }
                 block.block_exercises.sort((a: BlockExercise, b: BlockExercise) => a.position - b.position)
-                block.block_exercises.forEach((ex: any) => {
+                block.block_exercises.forEach((ex: ActiveBlockExercise) => {
                   if (ex.prescribed_sets) {
                     ex.prescribed_sets.sort((a: PrescribedSet, b: PrescribedSet) =>
                       a.week_number - b.week_number || a.set_number - b.set_number

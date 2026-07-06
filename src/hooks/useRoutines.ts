@@ -91,6 +91,10 @@ interface GetRoutineWithDetailsOptions {
   includeInactiveBlockExercises?: boolean
 }
 
+const DISPLAY_BLOCK_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+
+const getDisplayBlockLetter = (index: number) => DISPLAY_BLOCK_LETTERS[index] || `X${index + 1}`
+
 export function useRoutines(studentId?: string) {
   const [routines, setRoutines] = useState<RoutineWithStudent[]>([])
   const [loading, setLoading] = useState(true)
@@ -181,9 +185,12 @@ export function useRoutines(studentId?: string) {
         routineWithDays.routine_days.forEach(day => {
           if (day.routine_blocks) {
             day.routine_blocks.sort((a: RoutineBlock, b: RoutineBlock) =>
-              a.block_letter.localeCompare(b.block_letter) || a.block_order - b.block_order
+              a.block_order - b.block_order || a.block_letter.localeCompare(b.block_letter)
             )
-            day.routine_blocks.forEach(block => {
+            day.routine_blocks.forEach((block, blockIndex) => {
+              block.block_letter = getDisplayBlockLetter(blockIndex)
+              block.block_order = blockIndex
+
               if (block.block_exercises) {
                 if (!options.includeInactiveBlockExercises) {
                   block.block_exercises = block.block_exercises.filter((ex: BlockExercise) => ex.active !== false)
@@ -326,6 +333,13 @@ export function useRoutines(studentId?: string) {
       const keptBlockIds = new Set<string>()
       const keptExerciseIds = new Set<string>()
       const removedExistingExerciseIds = new Set<string>()
+      const submittedExistingBlockIds = new Set(
+        data.days.flatMap(day =>
+          day.blocks
+            .filter(block => existingBlocks.has(block.id))
+            .map(block => block.id)
+        )
+      )
       const submittedExistingExerciseIds = new Set(
         data.days.flatMap(day =>
           day.blocks.flatMap(block =>
@@ -335,6 +349,34 @@ export function useRoutines(studentId?: string) {
           )
         )
       )
+
+      const getExistingBlockForSubmission = (
+        dayId: string,
+        block: UpdateRoutineBlockData
+      ) => {
+        const existingBlockById = existingBlocks.get(block.id)
+        if (existingBlockById) return existingBlockById
+
+        const existingBlockByLetter = existingBlocksByDayAndLetter.get(`${dayId}:${block.block_letter}`)
+        if (!existingBlockByLetter) return undefined
+        if (submittedExistingBlockIds.has(existingBlockByLetter.id)) return undefined
+
+        return existingBlockByLetter
+      }
+
+      const freeExistingBlockLetters = async (dayId: string) => {
+        const blocksToMove = Array.from(existingBlocks.values())
+          .filter(block => block.routine_day_id === dayId)
+
+        for (const [index, block] of blocksToMove.entries()) {
+          const { error } = await supabase
+            .from('routine_blocks')
+            .update({ block_letter: `__tmp_${index}_${block.id.slice(0, 8)}` })
+            .eq('id', block.id)
+
+          if (error) throw error
+        }
+      }
 
       const retireExistingExercise = async (exerciseId: string) => {
         removedExistingExerciseIds.add(exerciseId)
@@ -452,9 +494,10 @@ export function useRoutines(studentId?: string) {
 
         keptDayIds.add(dayId)
 
+        await freeExistingBlockLetters(dayId)
+
         for (const block of day.blocks) {
-          const existingBlock = existingBlocks.get(block.id) ||
-            existingBlocksByDayAndLetter.get(`${dayId}:${block.block_letter}`)
+          const existingBlock = getExistingBlockForSubmission(dayId, block)
           let blockId = existingBlock?.id || block.id
 
           if (existingBlock) {
