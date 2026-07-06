@@ -336,6 +336,74 @@ export function useRoutines(studentId?: string) {
         )
       )
 
+      const retireExistingExercise = async (exerciseId: string) => {
+        removedExistingExerciseIds.add(exerciseId)
+
+        const { count, error: countError } = await supabase
+          .from('logged_sets')
+          .select('id', { count: 'exact', head: true })
+          .eq('block_exercise_id', exerciseId)
+
+        if (countError) throw countError
+
+        if ((count || 0) > 0) {
+          const { error: deactivateExerciseError } = await supabase
+            .from('block_exercises')
+            .update({ active: false })
+            .eq('id', exerciseId)
+
+          if (deactivateExerciseError) throw deactivateExerciseError
+          return
+        }
+
+        const { error: deleteExerciseError } = await supabase
+          .from('block_exercises')
+          .delete()
+          .eq('id', exerciseId)
+
+        if (deleteExerciseError) throw deleteExerciseError
+      }
+
+      const getExistingExerciseForSubmission = (
+        blockId: string,
+        exercise: UpdateRoutineExerciseData
+      ) => {
+        const existingExerciseById = existingExercises.get(exercise.id)
+        if (existingExerciseById) return existingExerciseById
+
+        const existingExerciseByPosition = existingExercisesByBlockAndPosition.get(`${blockId}:${exercise.position}`)
+        if (!existingExerciseByPosition) return undefined
+        if (removedExistingExerciseIds.has(existingExerciseByPosition.id)) return undefined
+        if (submittedExistingExerciseIds.has(existingExerciseByPosition.id)) return undefined
+
+        return existingExerciseByPosition
+      }
+
+      const freeExistingExercisePositions = async (
+        blockId: string,
+        exercises: UpdateRoutineExerciseData[]
+      ) => {
+        const exercisesToMove = new Map<string, BlockExercise>()
+
+        exercises.forEach(exercise => {
+          const existingExercise = getExistingExerciseForSubmission(blockId, exercise)
+          if (!existingExercise) return
+          if (existingExercise.active === false) return
+          if (existingExercise.exercise_id !== exercise.exercise_id) return
+
+          exercisesToMove.set(existingExercise.id, existingExercise)
+        })
+
+        for (const [index, exercise] of Array.from(exercisesToMove.values()).entries()) {
+          const { error } = await supabase
+            .from('block_exercises')
+            .update({ position: -1000 - index })
+            .eq('id', exercise.id)
+
+          if (error) throw error
+        }
+      }
+
       const { error: routineError } = await supabase
         .from('routines')
         .update({
@@ -349,31 +417,7 @@ export function useRoutines(studentId?: string) {
       if (submittedExistingExerciseIds.size > 0) {
         for (const [exerciseId] of existingExercises) {
           if (submittedExistingExerciseIds.has(exerciseId)) continue
-          removedExistingExerciseIds.add(exerciseId)
-
-          const { count, error: countError } = await supabase
-            .from('logged_sets')
-            .select('id', { count: 'exact', head: true })
-            .eq('block_exercise_id', exerciseId)
-
-          if (countError) throw countError
-
-          if ((count || 0) > 0) {
-            const { error: deactivateExerciseError } = await supabase
-              .from('block_exercises')
-              .update({ active: false })
-              .eq('id', exerciseId)
-
-            if (deactivateExerciseError) throw deactivateExerciseError
-            continue
-          }
-
-          const { error: deleteExerciseError } = await supabase
-            .from('block_exercises')
-            .delete()
-            .eq('id', exerciseId)
-
-          if (deleteExerciseError) throw deleteExerciseError
+          await retireExistingExercise(exerciseId)
         }
       }
 
@@ -441,16 +485,20 @@ export function useRoutines(studentId?: string) {
 
           keptBlockIds.add(blockId)
 
-          for (const exercise of block.exercises) {
-            const existingExerciseById = existingExercises.get(exercise.id)
-            const existingExerciseByPosition = existingExercisesByBlockAndPosition.get(`${blockId}:${exercise.position}`)
-            const existingExercise = existingExerciseById ||
-              (existingExerciseByPosition && !removedExistingExerciseIds.has(existingExerciseByPosition.id)
-                ? existingExerciseByPosition
-                : undefined)
-            let blockExerciseId = existingExercise?.id || exercise.id
+          await freeExistingExercisePositions(blockId, block.exercises)
 
-            if (existingExercise) {
+          for (const exercise of block.exercises) {
+            const existingExercise = getExistingExerciseForSubmission(blockId, exercise)
+            const shouldReplaceExercise = Boolean(
+              existingExercise && existingExercise.exercise_id !== exercise.exercise_id
+            )
+            let blockExerciseId = shouldReplaceExercise ? exercise.id : existingExercise?.id || exercise.id
+
+            if (existingExercise && shouldReplaceExercise) {
+              await retireExistingExercise(existingExercise.id)
+            }
+
+            if (existingExercise && !shouldReplaceExercise) {
               const { error } = await supabase
                 .from('block_exercises')
                 .update({
@@ -487,17 +535,35 @@ export function useRoutines(studentId?: string) {
 
                 if (concurrentExerciseError || !concurrentExercise) throw error
 
-                const { error: updateConcurrentExerciseError } = await supabase
-                  .from('block_exercises')
-                  .update({
-                    exercise_id: exercise.exercise_id,
-                    note: exercise.note || null,
-                    active: true,
-                  })
-                  .eq('id', concurrentExercise.id)
+                if (concurrentExercise.exercise_id !== exercise.exercise_id) {
+                  await retireExistingExercise(concurrentExercise.id)
 
-                if (updateConcurrentExerciseError) throw updateConcurrentExerciseError
-                blockExerciseId = concurrentExercise.id
+                  const { data: retriedExercise, error: retryExerciseError } = await supabase
+                    .from('block_exercises')
+                    .insert({
+                      block_id: blockId,
+                      exercise_id: exercise.exercise_id,
+                      position: exercise.position,
+                      note: exercise.note || null,
+                      active: true,
+                    })
+                    .select()
+                    .single()
+
+                  if (retryExerciseError) throw retryExerciseError
+                  blockExerciseId = retriedExercise.id
+                } else {
+                  const { error: updateConcurrentExerciseError } = await supabase
+                    .from('block_exercises')
+                    .update({
+                      note: exercise.note || null,
+                      active: true,
+                    })
+                    .eq('id', concurrentExercise.id)
+
+                  if (updateConcurrentExerciseError) throw updateConcurrentExerciseError
+                  blockExerciseId = concurrentExercise.id
+                }
               } else {
                 blockExerciseId = insertedExercise.id
               }
@@ -532,6 +598,7 @@ export function useRoutines(studentId?: string) {
       }
 
       for (const [exerciseId] of existingExercises) {
+        if (removedExistingExerciseIds.has(exerciseId)) continue
         if (submittedExistingExerciseIds.size > 0 && !submittedExistingExerciseIds.has(exerciseId)) continue
         if (keptExerciseIds.has(exerciseId)) continue
 

@@ -55,7 +55,7 @@ export function RoutineEdit() {
             id: block.id,
             block_letter: block.block_letter,
             block_order: block.block_order,
-            exercises: (block.block_exercises || []).map(ex => {
+            exercises: (block.block_exercises || []).map((ex, exerciseIndex) => {
               // Agrupar sets por semana
               const weekMap = new Map<number, typeof ex.prescribed_sets>()
               ;(ex.prescribed_sets || []).forEach(set => {
@@ -91,7 +91,7 @@ export function RoutineEdit() {
                 id: ex.id,
                 exercise_id: ex.exercise_id,
                 exercise: ex.exercise,
-                position: ex.position,
+                position: exerciseIndex + 1,
                 note: ex.note || '',
                 weeks,
               }
@@ -296,6 +296,7 @@ export function RoutineEdit() {
             loading={saving}
           />
         )}
+
       </div>
     </Layout>
   )
@@ -313,10 +314,10 @@ function formDataToUpdateRoutineData(formData: RoutineFormData): UpdateRoutineDa
         id: block.id,
         block_letter: block.block_letter,
         block_order: blockIndex,
-        exercises: block.exercises.map(exercise => ({
+        exercises: block.exercises.map((exercise, exerciseIndex) => ({
           id: exercise.id,
           exercise_id: exercise.exercise_id,
-          position: exercise.position,
+          position: exerciseIndex + 1,
           note: exercise.note || undefined,
           sets: exercise.weeks.flatMap(week =>
             week.sets.map((set, setIndex) => ({
