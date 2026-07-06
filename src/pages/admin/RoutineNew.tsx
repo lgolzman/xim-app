@@ -357,10 +357,10 @@ function routineToFormData(routine: RoutineWithDays): RoutineFormData {
       id: generateFormId(),
       day_number: day.day_number,
       name: day.name || '',
-      blocks: day.routine_blocks.map(block => ({
+      blocks: day.routine_blocks.map((block, blockIndex) => ({
         id: generateFormId(),
-        block_letter: block.block_letter,
-        block_order: block.block_order,
+        block_letter: getFormBlockLetter(blockIndex),
+        block_order: blockIndex,
         exercises: block.block_exercises.map((exercise, exerciseIndex) => ({
           id: generateFormId(),
           exercise_id: exercise.exercise_id,
@@ -393,10 +393,10 @@ function dbRoutineToFormData(routine: RoutineWithDays): RoutineFormData {
       id: day.id,
       day_number: day.day_number,
       name: day.name || '',
-      blocks: day.routine_blocks.map(block => ({
+      blocks: day.routine_blocks.map((block, blockIndex) => ({
         id: block.id,
-        block_letter: block.block_letter,
-        block_order: block.block_order,
+        block_letter: getFormBlockLetter(blockIndex),
+        block_order: blockIndex,
         exercises: block.block_exercises.map((exercise, exerciseIndex) => ({
           id: exercise.id,
           exercise_id: exercise.exercise_id,
@@ -490,6 +490,12 @@ function formDataToUpdateRoutineData(formData: RoutineFormData): UpdateRoutineDa
 
 function sortFormBlocksByLetter(blocks: RoutineFormData['days'][number]['blocks']) {
   return [...blocks].sort((a, b) => a.block_letter.localeCompare(b.block_letter))
+}
+
+const FORM_BLOCK_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+
+function getFormBlockLetter(index: number) {
+  return FORM_BLOCK_LETTERS[index] || `X${index + 1}`
 }
 
 function formHasData(formData: RoutineFormData | null, initialStudentId?: string) {
