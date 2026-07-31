@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { Layout } from '../components/layout/Layout'
 import { Button } from '../components/ui/Button'
@@ -38,6 +38,7 @@ interface WorkoutDraft {
   generalNote: string
   completedBlockIds?: string[]
   expandedBlockIds?: string[]
+  sequenceAnchorLogId?: string | null
   savedAt: string
 }
 
@@ -78,7 +79,11 @@ export function WorkoutExecution() {
   const targetStudentId = isAdminProxy ? studentId : user?.id
   const { info: nextWorkoutInfo, loading: nextWorkoutLoading } = useNextWorkout(targetStudentId)
   const { routine, loading: routineLoading } = useActiveRoutine(targetStudentId)
-  const { logs, createWorkoutLog } = useWorkoutLogs(targetStudentId, routine?.id)
+  const {
+    logs,
+    loading: workoutLogsLoading,
+    createWorkoutLog,
+  } = useWorkoutLogs(targetStudentId, routine?.id)
   const { exercises } = useExercises()
   const selectedAdminDayId = searchParams.get('day')
   const activeDayId = dayId || selectedAdminDayId || nextWorkoutInfo?.suggestedDay?.id
@@ -87,6 +92,8 @@ export function WorkoutExecution() {
   const draftKey = targetStudentId && activeDayId
     ? getWorkoutDraftKey(targetStudentId, activeDayId, weekNumber)
     : null
+  const progressionAnchorLog = logs.find(log => !log.is_extra) || null
+  const progressionAnchorLogId = progressionAnchorLog?.id || null
 
   const [day, setDay] = useState<RoutineDayWithBlocks | null>(null)
   const [setInputs, setSetInputs] = useState<SetInput[]>([])
@@ -104,15 +111,45 @@ export function WorkoutExecution() {
   const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const draftPersistenceDisabledRef = useRef(false)
 
   // Inicializar datos del día cuando carga la rutina
   useEffect(() => {
-    if (!routineLoading && !nextWorkoutLoading && activeDayId) {
+    if (!routineLoading && !nextWorkoutLoading && !workoutLogsLoading && activeDayId) {
       const dayData = routine?.routine_days.find(d => d.id === activeDayId)
       if (dayData) {
         setDraftReady(false)
         setDay(dayData)
-        const draft = targetStudentId ? readWorkoutDraft(getWorkoutDraftKey(targetStudentId, dayData.id, weekNumber)) : null
+        const storedDraft = targetStudentId
+          ? readWorkoutDraft(getWorkoutDraftKey(targetStudentId, dayData.id, weekNumber))
+          : null
+        const storedDraftSavedAt = storedDraft ? new Date(storedDraft.savedAt).getTime() : Number.NaN
+        const progressionCompletedAt = progressionAnchorLog
+          ? new Date(progressionAnchorLog.completed_at).getTime()
+          : Number.NaN
+        const isLegacyDraftFromCompletedWorkout =
+          storedDraft?.sequenceAnchorLogId === undefined &&
+          (
+            (
+              progressionAnchorLog?.routine_day_id === dayData.id &&
+              progressionAnchorLog.week_number === weekNumber
+            ) ||
+            (
+              Number.isFinite(storedDraftSavedAt) &&
+              Number.isFinite(progressionCompletedAt) &&
+              progressionCompletedAt > storedDraftSavedAt
+            )
+          )
+        const isDraftForCurrentSequence =
+          storedDraft?.sequenceAnchorLogId === undefined ||
+          storedDraft.sequenceAnchorLogId === progressionAnchorLogId
+        const draft = storedDraft && !isLegacyDraftFromCompletedWorkout && isDraftForCurrentSequence
+          ? storedDraft
+          : null
+
+        if (storedDraft && !draft && targetStudentId) {
+          localStorage.removeItem(getWorkoutDraftKey(targetStudentId, dayData.id, weekNumber))
+        }
 
         // Crear inputs para cada serie prescrita de la semana actual
         const inputs: SetInput[] = []
@@ -160,10 +197,20 @@ export function WorkoutExecution() {
         setDay(null)
       }
     }
-  }, [routineLoading, nextWorkoutLoading, routine, activeDayId, weekNumber, targetStudentId])
+  }, [
+    routineLoading,
+    nextWorkoutLoading,
+    workoutLogsLoading,
+    routine,
+    activeDayId,
+    weekNumber,
+    targetStudentId,
+    progressionAnchorLog,
+    progressionAnchorLogId,
+  ])
 
   useEffect(() => {
-    if (!draftKey || !draftReady || saving) return
+    if (!draftKey || !draftReady || saving || draftPersistenceDisabledRef.current) return
 
     const loggedSets = setInputs.reduce<WorkoutDraft['loggedSets']>((acc, input) => {
       if (!input.actual_reps && !input.actual_weight && !input.actual_seconds) return acc
@@ -203,11 +250,22 @@ export function WorkoutExecution() {
       generalNote: studentNote,
       completedBlockIds: Array.from(completedBlockIds),
       expandedBlockIds: Array.from(expandedBlockIds),
+      sequenceAnchorLogId: progressionAnchorLogId,
       savedAt: new Date().toISOString(),
     }
 
     localStorage.setItem(draftKey, JSON.stringify(draft))
-  }, [completedBlockIds, draftKey, draftReady, exerciseNotes, expandedBlockIds, saving, setInputs, studentNote])
+  }, [
+    completedBlockIds,
+    draftKey,
+    draftReady,
+    exerciseNotes,
+    expandedBlockIds,
+    progressionAnchorLogId,
+    saving,
+    setInputs,
+    studentNote,
+  ])
 
   const updateSetInput = (blockExerciseId: string, setNumber: number, field: string, value: string) => {
     setSetInputs(prev =>
@@ -415,6 +473,7 @@ export function WorkoutExecution() {
         return
       }
 
+      draftPersistenceDisabledRef.current = true
       if (draftKey) {
         localStorage.removeItem(draftKey)
       }
@@ -427,6 +486,7 @@ export function WorkoutExecution() {
   }
 
   const handleCancel = () => {
+    draftPersistenceDisabledRef.current = true
     if (draftKey) {
       localStorage.removeItem(draftKey)
     }
@@ -438,7 +498,7 @@ export function WorkoutExecution() {
     navigate(`/admin/students/${studentId}/register-workout?day=${selectedDayId}`)
   }
 
-  if (routineLoading || nextWorkoutLoading) {
+  if (routineLoading || nextWorkoutLoading || workoutLogsLoading) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
