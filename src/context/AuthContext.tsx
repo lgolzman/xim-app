@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { clearOpenWorkout } from '../lib/workoutResume'
 import type { Profile, Invitation } from '../lib/types'
 
 interface AuthContextType {
@@ -195,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     disabledSignOutRef.current = false
+    if (user) clearOpenWorkout(user.id)
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)

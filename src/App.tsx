@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { WorkoutResume } from './components/routines/WorkoutResume'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { Login } from './pages/Login'
 import { Register } from './pages/Register'
@@ -24,6 +25,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <WorkoutResume>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -176,6 +178,7 @@ function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </WorkoutResume>
       </AuthProvider>
     </BrowserRouter>
   )

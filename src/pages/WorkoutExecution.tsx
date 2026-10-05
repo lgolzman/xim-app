@@ -9,6 +9,8 @@ import { ExerciseDetail } from '../components/exercises/ExerciseDetail'
 import { useAuth } from '../context/AuthContext'
 import { useExercises } from '../hooks/useExercises'
 import { useNextWorkout } from '../hooks/useNextWorkout'
+import { useWorkoutResume } from '../hooks/useWorkoutResume'
+import { clearOpenWorkout } from '../lib/workoutResume'
 import { getBlockColor } from '../lib/blockColors'
 import type { CreateLoggedSetData } from '../hooks/useWorkoutLogs'
 import type { BlockExerciseWithDetails, ExerciseWithRelations, LoggedSet, RoutineDayWithBlocks } from '../lib/types'
@@ -110,6 +112,15 @@ export function WorkoutExecution() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const draftPersistenceDisabledRef = useRef(false)
+
+  useWorkoutResume(user?.id, routine?.id, progressionAnchorLogId,
+    draftReady && !nextWorkoutLoading && !draftPersistenceDisabledRef.current)
+
+  useEffect(() => {
+    if (!nextWorkoutLoading && user && (!routine || (activeDayId && !routine.routine_days.some(d => d.id === activeDayId)))) {
+      clearOpenWorkout(user.id)
+    }
+  }, [nextWorkoutLoading, user, routine, activeDayId])
 
   // Inicializar datos del día cuando carga la rutina
   useEffect(() => {
@@ -470,6 +481,7 @@ export function WorkoutExecution() {
       }
 
       draftPersistenceDisabledRef.current = true
+      clearOpenWorkout(user.id)
       if (draftKey) {
         localStorage.removeItem(draftKey)
       }
@@ -483,10 +495,11 @@ export function WorkoutExecution() {
 
   const handleCancel = () => {
     draftPersistenceDisabledRef.current = true
+    if (user) clearOpenWorkout(user.id)
     if (draftKey) {
       localStorage.removeItem(draftKey)
     }
-    navigate(-1)
+    navigate(isAdminProxy && studentId ? `/admin/students/${studentId}` : '/')
   }
 
   const handleAdminSelectDay = (selectedDayId: string) => {
