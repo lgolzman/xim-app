@@ -7,8 +7,6 @@ import { Modal } from '../components/ui/Modal'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { ExerciseDetail } from '../components/exercises/ExerciseDetail'
 import { useAuth } from '../context/AuthContext'
-import { useActiveRoutine } from '../hooks/useActiveRoutine'
-import { useWorkoutLogs } from '../hooks/useWorkoutLogs'
 import { useExercises } from '../hooks/useExercises'
 import { useNextWorkout } from '../hooks/useNextWorkout'
 import { getBlockColor } from '../lib/blockColors'
@@ -77,13 +75,13 @@ export function WorkoutExecution() {
   const { user } = useAuth()
   const isAdminProxy = Boolean(studentId)
   const targetStudentId = isAdminProxy ? studentId : user?.id
-  const { info: nextWorkoutInfo, loading: nextWorkoutLoading } = useNextWorkout(targetStudentId)
-  const { routine, loading: routineLoading } = useActiveRoutine(targetStudentId)
   const {
+    info: nextWorkoutInfo,
+    routine,
     logs,
-    loading: workoutLogsLoading,
+    loading: nextWorkoutLoading,
     createWorkoutLog,
-  } = useWorkoutLogs(targetStudentId, routine?.id)
+  } = useNextWorkout(targetStudentId)
   const { exercises } = useExercises()
   const selectedAdminDayId = searchParams.get('day')
   const activeDayId = dayId || selectedAdminDayId || nextWorkoutInfo?.suggestedDay?.id
@@ -115,7 +113,7 @@ export function WorkoutExecution() {
 
   // Inicializar datos del día cuando carga la rutina
   useEffect(() => {
-    if (!routineLoading && !nextWorkoutLoading && !workoutLogsLoading && activeDayId) {
+    if (!nextWorkoutLoading && activeDayId) {
       const dayData = routine?.routine_days.find(d => d.id === activeDayId)
       if (dayData) {
         setDraftReady(false)
@@ -198,9 +196,7 @@ export function WorkoutExecution() {
       }
     }
   }, [
-    routineLoading,
     nextWorkoutLoading,
-    workoutLogsLoading,
     routine,
     activeDayId,
     weekNumber,
@@ -498,7 +494,7 @@ export function WorkoutExecution() {
     navigate(`/admin/students/${studentId}/register-workout?day=${selectedDayId}`)
   }
 
-  if (routineLoading || nextWorkoutLoading || workoutLogsLoading) {
+  if (nextWorkoutLoading) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">

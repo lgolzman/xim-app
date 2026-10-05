@@ -53,28 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session)
         setUser(session?.user ?? null)
 
-        if (session?.user) {
-          const profile = await fetchProfile(session.user.id)
-          if (!isMounted) return
-
-          // Verificar si la cuenta está inhabilitada
-          if (profile && profile.active === false) {
-            console.warn('Account is disabled, signing out')
-            disabledSignOutRef.current = true
-            setIsDisabled(true)
-            await supabase.auth.signOut()
-            setSession(null)
-            setUser(null)
-            setProfile(null)
-            return
-          }
-
-          setIsDisabled(false)
-          setProfile(profile)
-        } else {
-          setIsDisabled(false)
-          setProfile(null)
-        }
+        // El efecto de user?.id carga el perfil y valida la cuenta una sola vez.
+        // ProtectedRoute espera ese perfil antes de mostrar contenido protegido.
       } catch (error) {
         console.error('Error initializing auth:', error)
       } finally {

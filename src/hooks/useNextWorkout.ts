@@ -30,7 +30,7 @@ export interface NextWorkoutInfo {
 
 export function useNextWorkout(studentId: string | undefined) {
   const { routine, loading: routineLoading, error: routineError } = useActiveRoutine(studentId)
-  const { logs, loading: logsLoading, error: logsError } = useWorkoutLogs(studentId, routine?.id)
+  const { logs, loading: logsLoading, error: logsError, createWorkoutLog } = useWorkoutLogs(studentId, routine?.id)
 
   const loading = routineLoading || logsLoading
   const error = routineError || logsError
@@ -167,6 +167,7 @@ export function useNextWorkout(studentId: string | undefined) {
     error,
     routine,
     logs,
+    createWorkoutLog,
     getLastLogForDayNumber,
     getDayByNumber,
     getAvailableDays,
