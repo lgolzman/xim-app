@@ -30,3 +30,6 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Vista previa generada
+dist-preview/

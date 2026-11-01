@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.mjs",
+    "preview:planner": "vite --config vite.planner-preview.config.ts --open /planner-preview/",
+    "build:planner-preview": "vite build --config vite.planner-preview.config.ts && node scripts/package-planner-preview.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.1",

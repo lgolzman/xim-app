@@ -60,6 +60,7 @@ export function Header() {
                     Alumnos
                   </Link>
                 )}
+                {isAdmin && <Link to="/admin/planner" className="text-gray-600 hover:text-gray-900 text-sm font-medium">Agenda</Link>}
                 {isAdmin && (
                   <Link
                     to="/admin"
@@ -170,6 +171,7 @@ export function Header() {
                   Alumnos
                 </Link>
               )}
+              {isAdmin && <Link to="/admin/planner" onClick={() => setIsMobileMenuOpen(false)} className="px-3 py-2 text-sm font-medium text-gray-600">Agenda</Link>}
               {isAdmin && (
                 <Link
                   to="/admin"

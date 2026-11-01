@@ -13,6 +13,7 @@ import { WorkoutExecution } from './pages/WorkoutExecution'
 import { WorkoutHistory } from './pages/WorkoutHistory'
 import { WorkoutDetail } from './pages/WorkoutDetail'
 import { RoutineOverview } from './pages/RoutineOverview'
+import { Planner } from './pages/admin/Planner'
 import { Admin } from './pages/Admin'
 import { Students } from './pages/admin/Students'
 import { StudentDetail } from './pages/admin/StudentDetail'
@@ -175,6 +176,8 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route path="/admin/planner" element={<ProtectedRoute requireAdmin><Planner /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
