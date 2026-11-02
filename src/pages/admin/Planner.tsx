@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { FormEvent, PointerEvent } from 'react'
 import { Layout } from '../../components/layout/Layout'
 import { Modal } from '../../components/ui/Modal'
@@ -23,15 +23,12 @@ export function PlannerView({ planner, studentSource }: {
 }) {
     const { data, loading, busy, error, save, reload } = planner
     const { students, error: studentError } = studentSource
-    const [desktop, setDesktop] = useState(() => window.matchMedia?.('(min-width: 1024px)').matches ?? false)
-    useEffect(() => {
-        const media = window.matchMedia('(min-width: 1024px)')
-        const update = () => setDesktop(media.matches)
-        media.addEventListener('change', update)
-        return () => media.removeEventListener('change', update)
-    }, [])
-    const scale = desktop ? 2 / 3 : 0.5
+    const scale = 2 / 3
     const plan = readWeeklyPlan(data)
+    const [dayCount, setDayCount] = useState(() => window.matchMedia?.('(max-width: 767px)').matches ? 1 : 5)
+    const [firstDay, setFirstDay] = useState(0)
+    const swipe = useRef<{ x: number; y: number } | null>(null)
+    const shownDays = workdays.map((label, day) => ({ label, day })).slice(firstDay, firstDay + dayCount)
     const [mode, setMode] = useState<'current' | 'draft'>('current')
     const [venueFilter, setVenueFilter] = useState('')
     const [studentFilter, setStudentFilter] = useState('')
@@ -145,15 +142,28 @@ export function PlannerView({ planner, studentSource }: {
             {!data.weeklyPlan && (data.lessons.length > 0 || Object.keys(data.drafts).length > 0) && <p className="pl-empty">Se adaptó una semana de la agenda anterior al nuevo armado laboral. Revisá las clases antes de guardar. Los datos y borradores anteriores se conservan como respaldo; los sábados y domingos quedan fuera de esta vista.</p>}
             <div className="pl-toolbar"><strong>Lunes a viernes</strong><div className="pl-modes"><button className={!inDraft ? 'selected' : ''} onClick={() => { setMode('current'); setMoveKey(null) }}>Armado actual</button><button disabled={disabled} className={inDraft ? 'selected' : ''} onClick={() => void beginDraft()}>{plan.draft ? 'Retomar borrador' : 'Probar cambios'}</button></div></div>
             {inDraft && <div className="pl-draft"><div><strong>Estás probando cambios · {changes.length} modificaciones</strong><p>Se guarda cada cambio en el borrador. El armado actual se conserva hasta aplicar los cambios.</p></div><div><button disabled={disabled} onClick={() => void discard()}>Descartar</button><button className="pl-button" disabled={disabled || !changes.length} onClick={() => void apply()}>Aplicar cambios</button></div></div>}
+            <div className="pl-view-controls"><div className="pl-modes" aria-label="Cantidad de días">{[1, 2, 5].map(count => <button key={count} aria-pressed={dayCount === count} className={dayCount === count ? 'selected' : ''} onClick={() => { setDayCount(count); setFirstDay(Math.min(firstDay, 5 - count)) }}>{count === 5 ? 'Semana' : `${count} ${count === 1 ? 'día' : 'días'}`}</button>)}</div></div>
             <div className="pl-filters"><label>Buscar<input type="search" value={search} placeholder="Nombre, sede, actividad…" onChange={e => setSearch(e.target.value)}/></label><label>Sede<select value={venueFilter} onChange={e => setVenueFilter(e.target.value)}><option value="">Todas las sedes</option>{data.venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label><label>Alumno<select value={studentFilter} onChange={e => setStudentFilter(e.target.value)}><option value="">Todos los alumnos</option>{students.map(s => <option key={s.id} value={s.id}>{s.full_name || s.name || s.email}</option>)}</select></label><button disabled={disabled} onClick={() => setVenueOpen(true)}>Administrar sedes</button></div>
             <div className="pl-summary"><span><strong>{classes.filter(item => (item.kind ?? 'class') === 'class').length}</strong> clases</span><span><strong>{classes.filter(item => item.kind === 'activity' || item.kind === 'transfer').length}</strong> actividades</span><span><strong>{Number((classes.reduce((sum, item) => sum + item.duration, 0) / 60).toFixed(1))}</strong> horas semanales</span><span><strong>{transferTime}</strong> en traslados</span><span className={warnings.length ? 'pl-warning-text' : ''}>{warnings.length ? `${warnings.length} avisos para revisar` : 'Sin cruces de horarios'}</span><span>{busy ? 'Guardando…' : inDraft ? 'Borrador guardado' : 'Armado actual'}</span></div>
             {!classes.length && <div className="pl-empty">Agregá clases o actividades eligiendo los días y horarios de tu semana laboral.</div>}
             <p className="pl-footnote">Con el mouse podés arrastrar los bloques. En el celular, tocá un bloque y elegí “Mover en la grilla”; deslizar el dedo solo desplaza la vista.</p>
             {moveKey && <div className="pl-move-notice" role="status">Mover {classes.find(item => item.id === moveKey)?.title}: tocá el horario de destino en la grilla. <button onClick={() => setMoveKey(null)}>Cancelar movimiento</button></div>}
             {!!terms.length && <p className="pl-message" role="status">{visible.length} de {classes.length} bloques coinciden con la búsqueda.</p>}
-            <div className="pl-scroll" ref={calendarScroll}><div className="pl-calendar"><div className="pl-day-header pl-time-header">Hora</div>{workdays.map((day, i) => <div className="pl-day-header" key={day}><strong>{day}</strong><small>{Number((classes.filter(item => item.day === i).reduce((sum, item) => sum + item.duration, 0) / 60).toFixed(1))} h</small></div>)}
+            <div className={dayCount < 5 ? 'pl-scroll pl-focused' : 'pl-scroll'} ref={calendarScroll} style={{ touchAction: dayCount < 5 ? 'pan-y pinch-zoom' : 'auto' }} onPointerDownCapture={e => {
+                if (e.pointerType === 'touch' && dayCount < 5) { swipe.current = { x: e.clientX, y: e.clientY }; dragged.current = false }
+            }} onPointerMoveCapture={e => {
+                if (swipe.current && Math.abs(e.clientX - swipe.current.x) > 40 && Math.abs(e.clientX - swipe.current.x) > Math.abs(e.clientY - swipe.current.y) * 1.5) dragged.current = true
+            }} onPointerUpCapture={e => {
+                const start = swipe.current; swipe.current = null
+                if (!start) return
+                const dx = e.clientX - start.x, dy = e.clientY - start.y
+                if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+                    dragged.current = true
+                    setFirstDay(Math.max(0, Math.min(5 - dayCount, firstDay + (dx < 0 ? 1 : -1))))
+                }
+            }} onPointerCancelCapture={() => { swipe.current = null }}><div className="pl-calendar" style={{ gridTemplateColumns: `48px repeat(${dayCount}, minmax(0, 1fr))` }}><div className="pl-day-header pl-time-header">Hora</div>{shownDays.map(({ label, day }) => <div className="pl-day-header" key={day}>{dayCount < 5 && day === firstDay && <button className="pl-day-nav" aria-label="Día anterior" disabled={firstDay === 0} onClick={() => setFirstDay(Math.max(0, firstDay - 1))}>‹</button>}<strong>{label}</strong><small>{Number((classes.filter(item => item.day === day).reduce((sum, item) => sum + item.duration, 0) / 60).toFixed(1))} h</small>{dayCount < 5 && day === firstDay + dayCount - 1 && <button className="pl-day-nav" aria-label="Día siguiente" disabled={firstDay + dayCount >= 5} onClick={() => setFirstDay(Math.min(5 - dayCount, firstDay + 1))}>›</button>}</div>)}
                 <div className="pl-times" style={{ height: 1440 * scale }}>{Array.from({ length: 24 }, (_, i) => <span key={i} style={{ top: i * 60 * scale }}>{clock(i * 60)}</span>)}</div>
-                {workdays.map((_, day) => {
+                {shownDays.map(({ day }) => {
                     const daily = visible.filter(item => item.day === day)
                     const positions = layoutEvents(daily.map(item => ({ ...item, key: item.id })))
                     return <div key={day} data-planner-day={day} className={`pl-day ${moveKey ? 'pl-drop-target' : ''}`} style={{ height: 1440 * scale, backgroundSize: `100% ${60 * scale}px` }} onClick={e => {
