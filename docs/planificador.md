@@ -6,18 +6,19 @@ El planificador representa un único armado de lunes a viernes por día y horari
 
 - Entrar como administrador y abrir **Agenda** (`/admin/planner`).
 - **Agregar clase**: seleccionar alumno (opcional), nombre, sede, uno o varios días, horario y duración. Lunes, miércoles y viernes crea tres bloques independientes en una sola operación.
-- **Agregar actividad** permite cargar traslados, paseos u otros compromisos con nombre, días, horario, duración y notas. No requiere alumno y la sede es opcional. Se identifica con ◇ y borde discontinuo; puede moverse, editarse y eliminarse como las clases.
+- **Agregar traslado** crea un bloque identificado con →, origen y destino opcionales, días, horario y duración individual desde un minuto. Los filtros por sede incluyen origen y destino, y ambos quedan protegidos contra eliminación mientras estén en uso. Los traslados ocupan horario y participan en borradores, movimientos y superposiciones.
+- **Agregar actividad** permite cargar paseos u otros compromisos con nombre, días, horario, duración y notas. No requiere alumno y la sede es opcional. Se identifica con ◇ y borde discontinuo; puede moverse, editarse y eliminarse como las clases.
 - La grilla incluye las 24 horas y abre en las 7:00. Mantiene encabezados fijos y escala compacta de 30 px por hora.
-- Arrastrar un bloque o abrirlo y elegir **Mover en la grilla** para ubicarlo con otro clic. Los movimientos se ajustan a 15 minutos.
+- Con mouse se puede arrastrar un bloque. Con el dedo o lápiz se desplaza la vista sin arrastrar bloques; para moverlos, tocarlos y elegir **Mover en la grilla**, luego tocar el destino. Los movimientos se ajustan a 15 minutos.
 - **Probar cambios** crea un borrador persistente del armado. **Armado actual** permite comparar y **Retomar borrador** seguir trabajando. **Aplicar cambios** actualiza el armado; **Descartar** conserva el original.
 - La eliminación de una clase la quita del armado o del borrador, según el modo activo.
 - **Administrar sedes** permite crear sedes y eliminar las que no estén referenciadas por el armado o el borrador.
-- Los filtros por alumno y sede no afectan el cálculo de superposiciones, traslados ni búsqueda de huecos. Las actividades también ocupan horario; cuando no tienen sede, no se les calcula margen de traslado.
-- El buscador usa días disponibles, franja horaria, duración y sede. El traslado es un margen global configurable entre sedes.
+- Los filtros por alumno y sede no afectan el cálculo de superposiciones, traslados ni búsqueda de huecos. Las actividades también ocupan horario. Los traslados se cargan explícitamente y no se suma un margen automático adicional.
+- El buscador usa días disponibles, franja horaria, duración y sede. La búsqueda respeta los bloques de traslado cargados; el antiguo margen global ya no se usa en la vista laboral.
 
 ## Persistencia y compatibilidad
 
-Se mantiene la tabla privada `admin_planners` de la migración `018_admin_planner.sql`, ya existente. No hace falta otra migración: el nuevo modelo se guarda en `data.weeklyPlan`, con clases que contienen `day` (0 = lunes, 4 = viernes), horario, duración, alumno, sede y notas. El borrador contiene copia original y propuesta. Cada bloque distingue `kind` (`class` o `activity`); los anteriores sin este campo se interpretan como clases. No se guardan fechas ni recurrencias en este modelo.
+Se mantiene la tabla privada `admin_planners` de la migración `018_admin_planner.sql`, ya existente. No hace falta otra migración: el nuevo modelo se guarda en `data.weeklyPlan`, con clases que contienen `day` (0 = lunes, 4 = viernes), horario, duración, alumno, sede y notas. El borrador contiene copia original y propuesta. Cada bloque distingue `kind` (`class`, `activity` o `transfer`); los anteriores sin este campo se interpretan como clases. No se guardan fechas ni recurrencias en este modelo.
 
 Si todavía hay datos del planificador anterior, se adapta una semana al esquema laboral: se busca primero una semana con clases en el período actual o siguiente, y luego entre las semanas originales disponibles. Se respetan las excepciones de esa semana y se excluyen sábados y domingos. Se muestra un aviso para revisar la adaptación. Los datos originales y borradores anteriores se conservan en el JSON como respaldo y no se modifican; el nuevo armado empieza a persistirse al guardar. Una vez guardado, el esquema es independiente del calendario y no vuelve a importar clases antiguas aunque se eliminen todas las nuevas.
 

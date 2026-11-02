@@ -23,7 +23,8 @@ export interface WeekDraft {
     events: Occurrence[]
 }
 export interface WeeklyClass {
-    kind?: 'class' | 'activity'
+    kind?: 'class' | 'activity' | 'transfer'
+    destinationVenueId?: string
     id: string
     day: number
     studentId: string

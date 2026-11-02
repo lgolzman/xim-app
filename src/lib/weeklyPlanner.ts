@@ -15,7 +15,7 @@ export function readWeeklyPlan(data: PlannerData): WeeklyPlan {
     return { classes: [] }
 }
 export const sameClass = (a: WeeklyClass | undefined, b: WeeklyClass | undefined) => a && b
-    ? (a.kind ?? 'class') === (b.kind ?? 'class') && a.id === b.id && a.day === b.day && a.title === b.title && a.studentId === b.studentId && a.venueId === b.venueId && a.start === b.start && a.duration === b.duration && a.notes === b.notes
+    ? (a.destinationVenueId ?? '') === (b.destinationVenueId ?? '') && (a.kind ?? 'class') === (b.kind ?? 'class') && a.id === b.id && a.day === b.day && a.title === b.title && a.studentId === b.studentId && a.venueId === b.venueId && a.start === b.start && a.duration === b.duration && a.notes === b.notes
     : a === b
 export function changedClasses(plan: WeeklyPlan) {
     if (!plan.draft) return []
