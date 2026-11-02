@@ -5,10 +5,13 @@ El planificador representa un único armado de lunes a viernes por día y horari
 ## Uso
 
 - Entrar como administrador y abrir **Agenda** (`/admin/planner`).
+- Al tocar un espacio vacío de la grilla, elegir **Clase**, **Actividad** o **Traslado** abre el formulario con día y horario precargados, ajustados a 15 minutos.
+- El buscador filtra al escribir por nombre, alumno, sede, origen, destino, notas, día y tipo, sin distinguir mayúsculas ni tildes. Se combina con los filtros existentes y muestra la cantidad de coincidencias. Los totales y avisos mantienen el contexto del armado completo.
+- El resumen muestra el tiempo semanal en traslados en horas y minutos, tanto en el armado actual como en el borrador.
 - **Agregar clase**: seleccionar alumno (opcional), nombre, sede, uno o varios días, horario y duración. Lunes, miércoles y viernes crea tres bloques independientes en una sola operación.
 - **Agregar traslado** crea un bloque identificado con →, origen y destino opcionales, días, horario y duración individual desde un minuto. Los filtros por sede incluyen origen y destino, y ambos quedan protegidos contra eliminación mientras estén en uso. Los traslados ocupan horario y participan en borradores, movimientos y superposiciones.
 - **Agregar actividad** permite cargar paseos u otros compromisos con nombre, días, horario, duración y notas. No requiere alumno y la sede es opcional. Se identifica con ◇ y borde discontinuo; puede moverse, editarse y eliminarse como las clases.
-- La grilla incluye las 24 horas y abre en las 7:00. Mantiene encabezados fijos y escala compacta de 30 px por hora.
+- La grilla incluye las 24 horas y abre en las 7:00. Mantiene encabezados fijos y escala de 40 px por hora en PC (desde 1024 px de ancho) y 30 px por hora en pantallas pequeñas. En PC los bloques de 45 minutos o más muestran la sede.
 - Con mouse se puede arrastrar un bloque. Con el dedo o lápiz se desplaza la vista sin arrastrar bloques; para moverlos, tocarlos y elegir **Mover en la grilla**, luego tocar el destino. Los movimientos se ajustan a 15 minutos.
 - **Probar cambios** crea un borrador persistente del armado. **Armado actual** permite comparar y **Retomar borrador** seguir trabajando. **Aplicar cambios** actualiza el armado; **Descartar** conserva el original.
 - La eliminación de una clase la quita del armado o del borrador, según el modo activo.

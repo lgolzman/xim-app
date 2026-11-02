@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent, PointerEvent } from 'react'
 import { Layout } from '../../components/layout/Layout'
 import { Modal } from '../../components/ui/Modal'
@@ -10,7 +10,6 @@ import type { WeeklyClass, WeeklyPlan } from '../../lib/planner'
 import { changedClasses, confirmWeeklyDraft, readWeeklyPlan, sameClass, weeklyConflicts, weeklySlots, workdays } from '../../lib/weeklyPlanner'
 import './planner.css'
 const colors = ['#0f766e', '#7c3aed', '#c2410c', '#0369a1', '#be185d', '#4d7c0f']
-const scale = 0.5
 interface ClassEditor extends WeeklyClass { isNew: boolean }
 export function Planner() {
     const { user } = useAuth()
@@ -24,10 +23,20 @@ export function PlannerView({ planner, studentSource }: {
 }) {
     const { data, loading, busy, error, save, reload } = planner
     const { students, error: studentError } = studentSource
+    const [desktop, setDesktop] = useState(() => window.matchMedia?.('(min-width: 1024px)').matches ?? false)
+    useEffect(() => {
+        const media = window.matchMedia('(min-width: 1024px)')
+        const update = () => setDesktop(media.matches)
+        media.addEventListener('change', update)
+        return () => media.removeEventListener('change', update)
+    }, [])
+    const scale = desktop ? 2 / 3 : 0.5
     const plan = readWeeklyPlan(data)
     const [mode, setMode] = useState<'current' | 'draft'>('current')
     const [venueFilter, setVenueFilter] = useState('')
     const [studentFilter, setStudentFilter] = useState('')
+    const [search, setSearch] = useState('')
+    const [newSlot, setNewSlot] = useState<{ day: number; start: number } | null>(null)
     const [editor, setEditor] = useState<ClassEditor | null>(null)
     const [classDays, setClassDays] = useState<number[]>([0])
     const [venueOpen, setVenueOpen] = useState(false)
@@ -46,17 +55,26 @@ export function PlannerView({ planner, studentSource }: {
     const [dragHover, setDragHover] = useState<{ x: number; y: number } | null>(null)
     const inDraft = mode === 'draft' && !!plan.draft
     const classes = inDraft ? plan.draft!.classes : plan.classes
-    const visible = classes.filter(item => (!venueFilter || item.venueId === venueFilter || item.destinationVenueId === venueFilter) && (!studentFilter || item.studentId === studentFilter))
+    const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim()
+    const terms = normalize(search).split(/\s+/).filter(Boolean)
+    const visible = classes.filter(item => {
+        const student = students.find(s => s.id === item.studentId)
+        const haystack = normalize([item.title, item.notes, student?.full_name, student?.name, student?.email, data.venues.find(v => v.id === item.venueId)?.name, data.venues.find(v => v.id === item.destinationVenueId)?.name, workdays[item.day], item.kind === 'transfer' ? 'traslado' : item.kind === 'activity' ? 'actividad' : 'clase'].filter(Boolean).join(' '))
+        return terms.every(term => haystack.includes(term)) && (!venueFilter || item.venueId === venueFilter || item.destinationVenueId === venueFilter) && (!studentFilter || item.studentId === studentFilter)
+    })
+    const transferMinutes = classes.filter(item => item.kind === 'transfer').reduce((sum, item) => sum + item.duration, 0)
+    const transferTime = transferMinutes >= 60 ? `${Math.floor(transferMinutes / 60)} h${transferMinutes % 60 ? ` ${transferMinutes % 60} min` : ''}` : `${transferMinutes} min`
     const warnings = weeklyConflicts(classes, 0)
     const changes = changedClasses(plan)
     const disabled = busy || loading || !!error
-    const calendarScroll = useCallback((node: HTMLDivElement | null) => { if (node) node.scrollTop = 7 * 60 * scale }, [])
+    const calendarScroll = useCallback((node: HTMLDivElement | null) => { if (node) node.scrollTop = 7 * 60 * scale }, [scale])
     const savePlan = (next: WeeklyPlan) => save({ ...data, weeklyPlan: next })
     const saveClasses = (next: WeeklyClass[]) => savePlan(inDraft ? { ...plan, draft: { ...plan.draft!, classes: next } } : { ...plan, classes: next })
-    function openEditor(item?: WeeklyClass, kind: 'class' | 'activity' | 'transfer' = 'class') {
+    function openEditor(item?: WeeklyClass, kind: 'class' | 'activity' | 'transfer' = 'class', slot?: { day: number; start: number }) {
         setFormError(''); setShowSlots(false); setMoveKey(null)
-        setClassDays([item?.day ?? 0])
-        setEditor(item ? { ...item, isNew: false } : { id: crypto.randomUUID(), kind, day: 0, studentId: '', title: '', venueId: '', start: 540, duration: 60, notes: '', isNew: true })
+        setNewSlot(null)
+        setClassDays([item?.day ?? slot?.day ?? 0])
+        setEditor(item ? { ...item, isNew: false } : { id: crypto.randomUUID(), kind, day: slot?.day ?? 0, studentId: '', title: '', venueId: '', start: slot?.start ?? 540, duration: Math.min(60, 1440 - (slot?.start ?? 540)), notes: '', isNew: true })
     }
     function venueInUse(id: string) {
         return [...plan.classes, ...(plan.draft?.original ?? []), ...(plan.draft?.classes ?? [])].some(item => item.venueId === id || item.destinationVenueId === id)
@@ -127,17 +145,23 @@ export function PlannerView({ planner, studentSource }: {
             {!data.weeklyPlan && (data.lessons.length > 0 || Object.keys(data.drafts).length > 0) && <p className="pl-empty">Se adaptó una semana de la agenda anterior al nuevo armado laboral. Revisá las clases antes de guardar. Los datos y borradores anteriores se conservan como respaldo; los sábados y domingos quedan fuera de esta vista.</p>}
             <div className="pl-toolbar"><strong>Lunes a viernes</strong><div className="pl-modes"><button className={!inDraft ? 'selected' : ''} onClick={() => { setMode('current'); setMoveKey(null) }}>Armado actual</button><button disabled={disabled} className={inDraft ? 'selected' : ''} onClick={() => void beginDraft()}>{plan.draft ? 'Retomar borrador' : 'Probar cambios'}</button></div></div>
             {inDraft && <div className="pl-draft"><div><strong>Estás probando cambios · {changes.length} modificaciones</strong><p>Se guarda cada cambio en el borrador. El armado actual se conserva hasta aplicar los cambios.</p></div><div><button disabled={disabled} onClick={() => void discard()}>Descartar</button><button className="pl-button" disabled={disabled || !changes.length} onClick={() => void apply()}>Aplicar cambios</button></div></div>}
-            <div className="pl-filters"><label>Sede<select value={venueFilter} onChange={e => setVenueFilter(e.target.value)}><option value="">Todas las sedes</option>{data.venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label><label>Alumno<select value={studentFilter} onChange={e => setStudentFilter(e.target.value)}><option value="">Todos los alumnos</option>{students.map(s => <option key={s.id} value={s.id}>{s.full_name || s.name || s.email}</option>)}</select></label><button disabled={disabled} onClick={() => setVenueOpen(true)}>Administrar sedes</button></div>
-            <div className="pl-summary"><span><strong>{classes.filter(item => (item.kind ?? 'class') === 'class').length}</strong> clases</span><span><strong>{classes.filter(item => item.kind === 'activity' || item.kind === 'transfer').length}</strong> actividades</span><span><strong>{Number((classes.reduce((sum, item) => sum + item.duration, 0) / 60).toFixed(1))}</strong> horas semanales</span><span className={warnings.length ? 'pl-warning-text' : ''}>{warnings.length ? `${warnings.length} avisos para revisar` : 'Sin cruces de horarios'}</span><span>{busy ? 'Guardando…' : inDraft ? 'Borrador guardado' : 'Armado actual'}</span></div>
+            <div className="pl-filters"><label>Buscar<input type="search" value={search} placeholder="Nombre, sede, actividad…" onChange={e => setSearch(e.target.value)}/></label><label>Sede<select value={venueFilter} onChange={e => setVenueFilter(e.target.value)}><option value="">Todas las sedes</option>{data.venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label><label>Alumno<select value={studentFilter} onChange={e => setStudentFilter(e.target.value)}><option value="">Todos los alumnos</option>{students.map(s => <option key={s.id} value={s.id}>{s.full_name || s.name || s.email}</option>)}</select></label><button disabled={disabled} onClick={() => setVenueOpen(true)}>Administrar sedes</button></div>
+            <div className="pl-summary"><span><strong>{classes.filter(item => (item.kind ?? 'class') === 'class').length}</strong> clases</span><span><strong>{classes.filter(item => item.kind === 'activity' || item.kind === 'transfer').length}</strong> actividades</span><span><strong>{Number((classes.reduce((sum, item) => sum + item.duration, 0) / 60).toFixed(1))}</strong> horas semanales</span><span><strong>{transferTime}</strong> en traslados</span><span className={warnings.length ? 'pl-warning-text' : ''}>{warnings.length ? `${warnings.length} avisos para revisar` : 'Sin cruces de horarios'}</span><span>{busy ? 'Guardando…' : inDraft ? 'Borrador guardado' : 'Armado actual'}</span></div>
             {!classes.length && <div className="pl-empty">Agregá clases o actividades eligiendo los días y horarios de tu semana laboral.</div>}
             <p className="pl-footnote">Con el mouse podés arrastrar los bloques. En el celular, tocá un bloque y elegí “Mover en la grilla”; deslizar el dedo solo desplaza la vista.</p>
             {moveKey && <div className="pl-move-notice" role="status">Mover {classes.find(item => item.id === moveKey)?.title}: tocá el horario de destino en la grilla. <button onClick={() => setMoveKey(null)}>Cancelar movimiento</button></div>}
+            {!!terms.length && <p className="pl-message" role="status">{visible.length} de {classes.length} bloques coinciden con la búsqueda.</p>}
             <div className="pl-scroll" ref={calendarScroll}><div className="pl-calendar"><div className="pl-day-header pl-time-header">Hora</div>{workdays.map((day, i) => <div className="pl-day-header" key={day}><strong>{day}</strong><small>{Number((classes.filter(item => item.day === i).reduce((sum, item) => sum + item.duration, 0) / 60).toFixed(1))} h</small></div>)}
                 <div className="pl-times" style={{ height: 1440 * scale }}>{Array.from({ length: 24 }, (_, i) => <span key={i} style={{ top: i * 60 * scale }}>{clock(i * 60)}</span>)}</div>
                 {workdays.map((_, day) => {
                     const daily = visible.filter(item => item.day === day)
                     const positions = layoutEvents(daily.map(item => ({ ...item, key: item.id })))
-                    return <div key={day} data-planner-day={day} className={`pl-day ${moveKey ? 'pl-drop-target' : ''}`} style={{ height: 1440 * scale }} onClick={e => { if (moveKey && e.target === e.currentTarget) void moveLesson(moveKey, day, (e.clientY - e.currentTarget.getBoundingClientRect().top) / scale) }}>
+                    return <div key={day} data-planner-day={day} className={`pl-day ${moveKey ? 'pl-drop-target' : ''}`} style={{ height: 1440 * scale, backgroundSize: `100% ${60 * scale}px` }} onClick={e => {
+                        if (e.target !== e.currentTarget || disabled || dragged.current) return
+                        const start = (e.clientY - e.currentTarget.getBoundingClientRect().top) / scale
+                        if (moveKey) void moveLesson(moveKey, day, start)
+                        else setNewSlot({ day, start: Math.max(0, Math.min(1425, Math.round(start / 15) * 15)) })
+                    }} onPointerDown={e => { if (e.target === e.currentTarget) dragged.current = false }}>
                         {daily.map(item => {
                             const venue = data.venues.find(v => v.id === item.venueId)
                             const original = plan.draft?.original.find(previous => previous.id === item.id)
@@ -150,7 +174,7 @@ export function PlannerView({ planner, studentSource }: {
                                 if (drag && Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 8) { dragged.current = true; void finishDrag(e) }
                                 else { setDrag(null); setDragHover(null) }
                             }} onPointerCancel={() => { dragged.current = true; setDrag(null); setDragHover(null) }} onClick={() => { if (!dragged.current && !moveKey) openEditor(item) }} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEditor(item) } }}>
-                                <span className="pl-event-time">{clock(item.start)}–{clock(item.start + item.duration)} {warnings.some(w => w.ids.includes(item.id)) ? '⚠' : ''}</span><strong>{item.kind === 'transfer' ? '→ ' : item.kind === 'activity' ? '◇ ' : ''}{item.title}</strong>
+                                <span className="pl-event-time">{clock(item.start)}–{clock(item.start + item.duration)} {warnings.some(w => w.ids.includes(item.id)) ? '⚠' : ''}</span><strong>{item.kind === 'transfer' ? '→ ' : item.kind === 'activity' ? '◇ ' : ''}{item.title}</strong>{venue && item.duration >= 45 && <span className="pl-event-venue">{venue.name}</span>}
                             </button>
                         })}
                     </div>
@@ -164,6 +188,9 @@ export function PlannerView({ planner, studentSource }: {
             <p className="pl-footnote">◇ Actividad · → Traslado · Cada traslado se carga como bloque con su propia duración. Los avisos consideran todas las clases y actividades, aunque haya filtros activos.</p>
         </>}
         {drag && dragHover && <div className="pl-drag-ghost" style={{ left: dragHover.x + 12, top: dragHover.y + 12 }}>{classes.find(item => item.id === drag.id)?.title}<small>Soltá para mover · intervalos de 15 min</small></div>}
+        <Modal isOpen={!!newSlot} onClose={() => setNewSlot(null)} title="Agregar en este horario">
+            {newSlot && <div className="pl-form"><p>{workdays[newSlot.day]} · {clock(newSlot.start)}</p><button className="pl-button" onClick={() => openEditor(undefined, 'class', newSlot)}>Clase</button><button className="pl-button" onClick={() => openEditor(undefined, 'activity', newSlot)}>Actividad</button><button className="pl-button" onClick={() => openEditor(undefined, 'transfer', newSlot)}>Traslado</button></div>}
+        </Modal>
         <Modal isOpen={!!editor} onClose={() => { if (!busy) setEditor(null) }} title={editor?.kind === 'transfer' ? editor.isNew ? 'Agregar traslado' : 'Editar traslado' : editor?.kind === 'activity' ? editor.isNew ? 'Agregar actividad' : 'Editar actividad' : editor?.isNew ? 'Agregar clase' : 'Editar clase'}>
             {editor && <form className="pl-form" onSubmit={e => void saveLesson(e)}>
                 {(editor.kind ?? 'class') === 'class' && <label>Alumno (opcional para bloqueos personales)<select value={editor.studentId} onChange={e => { const student = students.find(s => s.id === e.target.value); setEditor({ ...editor, studentId: e.target.value, title: student ? student.full_name || student.name || student.email || 'Clase' : editor.title }) }}><option value="">Sin alumno / bloqueo personal</option>{students.map(s => <option key={s.id} value={s.id}>{s.full_name || s.name || s.email}</option>)}</select></label>}
