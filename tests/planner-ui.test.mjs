@@ -25,7 +25,7 @@ function harness(desktop=false) {
   '../../components/layout/Layout':{Layout:'Layout'},'../../components/ui/Modal':{Modal:'Modal'},
   '../../context/AuthContext':{},'../../hooks/useStudents':{},'../../hooks/usePlanner':{},
   '../../lib/planner':lib,'../../lib/weeklyPlanner':weeklyLib,'./planner.css':{},
- },{crypto:{randomUUID:()=> `new-${nextId++}`},window:{confirm:()=>true,matchMedia:()=>({matches:desktop})},document:{elementFromPoint:()=>({closest:()=>({dataset:{plannerDay:'1'},getBoundingClientRect:()=>({top:-210})})})}})
+ },{crypto:{randomUUID:()=> `new-${nextId++}`},window:{confirm:()=>true,matchMedia:query=>({matches:query.includes('min-width')?desktop:false})},document:{elementFromPoint:()=>({closest:()=>({dataset:{plannerDay:'1'},getBoundingClientRect:()=>({top:-280})})})}})
  let tree
  const render=()=>{index=0;tree=component.PlannerView({planner,studentSource:{students:[],error:null}});return tree}
  function all(node){if(!node || typeof node!=='object')return[];if(Array.isArray(node))return node.flatMap(all);return[node,...all(node.props?.children)]}
@@ -38,7 +38,7 @@ function harness(desktop=false) {
 const flush=async h=>{await new Promise(setImmediate);h.render()}
 function drag(h){
  h.event().props.onPointerDown({pointerType:'mouse',button:0,pointerId:1,clientX:10,clientY:95,currentTarget:{setPointerCapture(){},getBoundingClientRect:()=>({top:90})}})
- h.render();h.event().props.onPointerUp({pointerId:1,clientX:200,clientY:125})
+ h.render();h.event().props.onPointerUp({pointerId:1,clientX:200,clientY:165})
 }
 function field(h,label){return h.all().find(n=>n.type==='label'&&h.text(n).startsWith(label)&&(label!=='Sede'||n.props.children.some(c=>c?.type==='select'&&c.props.required))).props.children.find(n=>n&&typeof n==='object'&&['input','select'].includes(n.type))}
 test('grilla laboral sin fechas ni fines de semana; 24 horas con escala compacta',()=>{
@@ -46,12 +46,12 @@ test('grilla laboral sin fechas ni fines de semana; 24 horas con escala compacta
  const headers=h.all().filter(n=>n.props?.className==='pl-day-header')
  assert.deepEqual(headers.map(h.text),['Lunes1 h','Martes0 h','Miércoles0 h','Jueves0 h','Viernes0 h'])
  const times=h.all().find(n=>n.props?.className==='pl-times')
- assert.equal(times.props.style.height,720)
+ assert.equal(times.props.style.height,960)
  assert.equal(h.text(times.props.children[0]),'00:00')
  assert.equal(h.text(times.props.children[23]),'23:00')
  const node={scrollTop:0};h.all().find(n=>n.props?.className==='pl-scroll').props.ref(node)
- assert.equal(node.scrollTop,210)
- assert.equal(h.event().props.style.height,30)
+ assert.equal(node.scrollTop,280)
+ assert.equal(h.event().props.style.height,40)
  h.button('＋ Agregar clase').props.onClick();h.render()
  assert.equal(h.all().some(n=>n.type==='input'&&n.props.type==='date'),false)
  assert.equal(h.all().some(n=>n.type==='label'&&h.text(n).startsWith('Repetición')),false)
@@ -68,7 +68,7 @@ test('borrador guardado permite comparar, retomar y aplicar movimientos',async()
  assert.equal(h.planner.data.weeklyPlan.classes[0].start,600)
  assert.equal(h.planner.data.weeklyPlan.draft.classes[0].start,660)
  h.button('Armado actual').props.onClick();h.render()
- assert.equal(h.event().props.style.top,300)
+ assert.equal(h.event().props.style.top,400)
  h.button('Retomar borrador').props.onClick();await flush(h)
  h.button('Aplicar cambios').props.onClick();await flush(h)
  assert.equal(h.planner.data.weeklyPlan.classes[0].start,660)
@@ -84,7 +84,7 @@ test('abrir con teclado y mover con clic en la grilla',async()=>{
  const h=harness();h.event().props.onKeyDown({key:'Enter',preventDefault(){}});h.render()
  h.button('Mover en la grilla').props.onClick();h.render()
  const column=h.all().find(n=>n.props?.['data-planner-day']===2)
- const target={getBoundingClientRect:()=>({top:-110})}
+ const target={getBoundingClientRect:()=>({top:-227.5})}
  column.props.onClick({target,currentTarget:target,clientY:242.5});await flush(h)
  assert.equal(h.planner.data.weeklyPlan.classes[0].day,2)
  assert.equal(h.planner.data.weeklyPlan.classes[0].start,705)
@@ -221,7 +221,7 @@ test('alta al final del día ajusta duración para no pasar medianoche',()=>{
  const h=harness()
  const column=h.all().find(n=>n.props?.['data-planner-day']===4)
  const target={getBoundingClientRect:()=>({top:0})}
- column.props.onClick({target,currentTarget:target,clientY:719});h.render()
+ column.props.onClick({target,currentTarget:target,clientY:959});h.render()
  h.button('Clase').props.onClick();h.render()
  assert.equal(field(h,'Horario').props.value,'23:45')
  assert.equal(field(h,'Minutos').props.value,15)
@@ -255,4 +255,40 @@ test('búsqueda en tiempo real ignora tildes y combina texto, destino y filtro d
  assert.equal(blocks().length,1)
  search('');assert.equal(blocks().length,1)
  assert.equal(h.planner.data.weeklyPlan.classes.length,2)
+})
+test('vistas de uno y dos días navegan de lunes a viernes y vuelven a semana',()=>{
+ const h=harness()
+ const headers=()=>h.all().filter(n=>n.props?.className==='pl-day-header').map(n=>h.text(n).replace(/[‹›]/g,''))
+ const nav=label=>h.all().find(n=>n.props?.['aria-label']===label)
+ h.button('1 día').props.onClick();h.render()
+ assert.deepEqual(headers(),['Lunes1 h'])
+ nav('Día siguiente').props.onClick();h.render()
+ assert.deepEqual(headers(),['Martes0 h'])
+ h.button('2 días').props.onClick();h.render()
+ assert.deepEqual(headers(),['Martes0 h','Miércoles0 h'])
+ for(let i=0;i<4;i++){nav('Día siguiente').props.onClick();h.render()}
+ assert.deepEqual(headers(),['Jueves0 h','Viernes0 h'])
+ assert.equal(nav('Día siguiente').props.disabled,true)
+ h.button('Semana').props.onClick();h.render()
+ assert.equal(headers().length,5)
+})
+test('swipe horizontal avanza sin modificar clases y scroll vertical no cambia de día',()=>{
+ const h=harness();h.button('1 día').props.onClick();h.render()
+ const scroll=()=>h.all().find(n=>n.props?.className==='pl-scroll pl-focused')
+ scroll().props.onPointerDownCapture({pointerType:'touch',clientX:200,clientY:100})
+ scroll().props.onPointerUpCapture({clientX:100,clientY:110});h.render()
+ assert.equal(h.all().find(n=>n.props?.['data-planner-day']===1)?.type,'div')
+ scroll().props.onPointerDownCapture({pointerType:'touch',clientX:200,clientY:100})
+ scroll().props.onPointerUpCapture({clientX:195,clientY:300});h.render()
+ assert.equal(h.all().find(n=>n.props?.['data-planner-day']===1)?.type,'div')
+ assert.equal(h.planner.data.weeklyPlan.classes[0].day,0)
+})
+
+test('flechas de navegación están dentro de los encabezados fijos de los días',()=>{
+ const h=harness();h.button('1 día').props.onClick();h.render()
+ const header=h.all().find(n=>n.props?.className==='pl-day-header')
+ assert.equal(header.props.children[0].props['aria-label'],'Día anterior')
+ assert.equal(header.props.children[3].props['aria-label'],'Día siguiente')
+ header.props.children[3].props.onClick();h.render()
+ assert.ok(h.all().find(n=>n.props?.['data-planner-day']===1))
 })
