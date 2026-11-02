@@ -20,7 +20,7 @@ function harness() {
  const jsxs=(type,props)=>({type,props})
  let nextId=0
  const component=load('src/pages/admin/Planner.tsx',{
-  react:{useCallback:callback=>callback,useState:initial=>{const slot=index++;if(!(slot in states))states[slot]=typeof initial==='function'?initial():initial;return[states[slot],value=>{states[slot]=typeof value==='function'?value(states[slot]):value}]}},
+  react:{useRef:initial=>{const slot=index++;return states[slot]??(states[slot]={current:initial})},useCallback:callback=>callback,useState:initial=>{const slot=index++;if(!(slot in states))states[slot]=typeof initial==='function'?initial():initial;return[states[slot],value=>{states[slot]=typeof value==='function'?value(states[slot]):value}]}},
   'react/jsx-runtime':{jsx:jsxs,jsxs,Fragment:'Fragment'},
   '../../components/layout/Layout':{Layout:'Layout'},'../../components/ui/Modal':{Modal:'Modal'},
   '../../context/AuthContext':{},'../../hooks/useStudents':{},'../../hooks/usePlanner':{},
@@ -37,7 +37,7 @@ function harness() {
 }
 const flush=async h=>{await new Promise(setImmediate);h.render()}
 function drag(h){
- h.event().props.onPointerDown({button:0,pointerId:1,clientX:10,clientY:95,currentTarget:{setPointerCapture(){},getBoundingClientRect:()=>({top:90})}})
+ h.event().props.onPointerDown({pointerType:'mouse',button:0,pointerId:1,clientX:10,clientY:95,currentTarget:{setPointerCapture(){},getBoundingClientRect:()=>({top:90})}})
  h.render();h.event().props.onPointerUp({pointerId:1,clientX:200,clientY:125})
 }
 function field(h,label){return h.all().find(n=>n.type==='label'&&h.text(n).startsWith(label)&&(label!=='Sede'||n.props.children.some(c=>c?.type==='select'&&c.props.required))).props.children.find(n=>n&&typeof n==='object'&&['input','select'].includes(n.type))}
@@ -140,4 +140,48 @@ test('actividad sin alumno ni sede ocupa horario, se guarda y se elimina como ac
  block.props.onKeyDown({key:'Enter',preventDefault(){}});h.render()
  h.button('Eliminar actividad').props.onClick();await flush(h)
  assert.equal(h.planner.data.weeklyPlan.classes.some(item=>item.kind==='activity'),false)
+})
+
+test('deslizar con el dedo sobre clases o actividades no inicia arrastre ni modifica horarios',async()=>{
+ for(const kind of ['class','activity']){
+  const h=harness();h.planner.data.weeklyPlan.classes[0].kind=kind;h.render()
+  assert.equal(h.event().props.style.touchAction,'auto')
+  h.event().props.onPointerDown({pointerType:'touch',button:0,pointerId:2,clientX:10,clientY:95,currentTarget:{setPointerCapture(){throw new Error('No debe capturar el dedo')}}})
+  h.render()
+  h.event().props.onPointerMove({pointerType:'touch',pointerId:2,clientX:200,clientY:250})
+  h.event().props.onPointerCancel();h.render()
+  h.event().props.onPointerUp({pointerType:'touch',pointerId:2,clientX:200,clientY:250})
+  await flush(h)
+  assert.equal(h.planner.data.weeklyPlan.classes[0].start,600)
+  assert.equal(h.planner.data.weeklyPlan.classes[0].day,0)
+  assert.equal(h.all().find(n=>n.type==='Modal'&&n.props.title==='Editar clase').props.isOpen,false)
+ }
+})
+test('toque abre editor; el clic generado luego del arrastre de mouse no lo abre',async()=>{
+ const h=harness()
+ h.event().props.onPointerDown({pointerType:'touch',button:0})
+ h.event().props.onPointerUp({pointerType:'touch'})
+ h.event().props.onClick();h.render()
+ assert.equal(h.all().find(n=>n.type==='Modal'&&n.props.title==='Editar clase').props.isOpen,true)
+ const moved=harness();drag(moved);await flush(moved)
+ moved.event().props.onClick();moved.render()
+ assert.equal(moved.all().find(n=>n.type==='Modal'&&n.props.title==='Editar clase').props.isOpen,false)
+})
+test('traslado con origen, destino y duración propia se guarda y bloquea ambos lugares',async()=>{
+ const h=harness()
+ h.planner.data.venues.push({id:'other',name:'Otro gimnasio',color:'#111111'});h.render()
+ h.button('＋ Agregar traslado').props.onClick();h.render()
+ field(h,'Nombre de la clase').props.onChange({target:{value:'Gimnasio a gimnasio'}});h.render()
+ field(h,'Origen').props.onChange({target:{value:'v'}});h.render()
+ field(h,'Destino').props.onChange({target:{value:'other'}});h.render()
+ field(h,'Minutos').props.onChange({target:{value:'10'}});h.render()
+ h.all().find(n=>n.type==='form').props.onSubmit({preventDefault(){}});await flush(h)
+ const block=h.planner.data.weeklyPlan.classes.find(item=>item.kind==='transfer')
+ assert.equal(block.duration,10)
+ assert.equal(block.venueId,'v')
+ assert.equal(block.destinationVenueId,'other')
+ assert.equal(block.studentId,'')
+ assert.ok(h.all().find(n=>n.type==='button'&&n.props.className?.includes('pl-transfer')))
+ h.button('Administrar sedes').props.onClick();h.render()
+ assert.equal(h.all().find(n=>n.props?.['aria-label']==='Eliminar sede Otro gimnasio').props.disabled,true)
 })

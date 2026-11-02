@@ -24,3 +24,5 @@
 .pl-calendar{grid-template-columns:58px repeat(5,minmax(125px,1fr));min-width:720px}.pl-day-header strong{font-size:13px}.pl-day-options{flex-wrap:wrap}
 
 .pl-event.pl-activity{border-left-style:dashed;background:#f1f5f9!important}.planner-heading>div{margin-right:auto}
+
+.pl-event.pl-transfer{border-left-color:#c2410c!important;background:#fff7ed!important}.planner-heading{flex-wrap:wrap}
